@@ -42,10 +42,8 @@ export default function PortalClient({
         return;
       }
 
-      if (data?.status === 'success') {
-        setStep(4);
-        clearInterval(interval);
-      } else if (data?.status === 'failed') {
+      // Route both success and failed fallbacks to the manual login UI
+      if (data?.status === 'success' || data?.status === 'failed') {
         setStep(5);
         clearInterval(interval);
       }
@@ -87,6 +85,10 @@ export default function PortalClient({
         channels: ['bank_transfer', 'card'],
         callback: (response: any) => {
           console.log('Paystack success response:', response);
+          // Immediately route to the manual login screen on successful payment
+          if (response.status === 'success' || response.message === 'Approved') {
+            setStep(5);
+          }
         },
         onClose: () => {
           setStep((prevStep) => (prevStep < 4 ? 2 : prevStep));
@@ -150,7 +152,7 @@ export default function PortalClient({
 
   return (
     <div className="max-w-md w-full mx-auto mt-10 space-y-6">
-      <Script src="https://js.paystack.co/v1/inline.js" strategy="lazyOnload" />
+      <Script src="https://js.paystack.co/v1/inline.js" strategy="afterInteractive" />
       
       <div className="flex justify-center mb-8">
         <Image src="/connectly-logo-horizontal.svg" alt="Connectly Logo" width={240} height={60} priority />
@@ -203,7 +205,7 @@ export default function PortalClient({
           </div>
           
           {step === 2 && (
-            <div className="p-4 space-y-4">
+            <form onSubmit={(e) => e.preventDefault()} className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Enter Phone Number (This will be your password)</label>
                 <input 
@@ -215,6 +217,7 @@ export default function PortalClient({
                 />
               </div>
               <button 
+                type="button"
                 onClick={handleInitiate} 
                 disabled={!phoneNumber || phoneNumber.length < 10} 
                 className="w-full text-white p-4 rounded-lg font-bold text-lg transition-opacity disabled:opacity-50"
@@ -222,7 +225,7 @@ export default function PortalClient({
               >
                 Pay ₦{selectedPlan?.price_kobo / 100}
               </button>
-            </div>
+            </form>
           )}
         </div>
 

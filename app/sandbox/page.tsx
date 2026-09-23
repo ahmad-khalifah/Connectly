@@ -15,7 +15,7 @@ export default function SimulatorPage() {
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   
-  // Simulated Monnify Payment state
+  // Simulated Paystack Payment state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const triggerDummyPayment = () => {
@@ -168,13 +168,13 @@ export default function SimulatorPage() {
         )}
       </div>
 
-      {/* Simulated Monnify Modal Overlay */}
+      {/* Simulated Paystack Modal Overlay */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-sm rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="bg-gray-100 p-4 flex justify-between items-center border-b">
               <div className="font-bold flex items-center gap-2">
-                <CreditCard size={18} /> Fake Monnify Widget
+                <CreditCard size={18} /> Fake Paystack Widget
               </div>
               <button onClick={() => setShowPaymentModal(false)} className="text-gray-500 hover:text-gray-900">
                 <X size={20} />

@@ -2,7 +2,7 @@ import { Cable, Activity, CheckCircle2, XCircle, AlertTriangle } from 'lucide-re
 
 export default function APIsIntegrationsPage() {
   const integrations = [
-    { name: 'Monnify Payment Gateway', status: 'connected', latency: '124ms', lastPing: '2 mins ago', type: 'Webhook' },
+    { name: 'Paystack Payment Gateway', status: 'connected', latency: '124ms', lastPing: '2 mins ago', type: 'Webhook' },
     { name: 'MikroTik RADIUS Auth', status: 'connected', latency: '45ms', lastPing: 'Just now', type: 'Internal API' },
     { name: 'Connectly Core Backend', status: 'connected', latency: '18ms', lastPing: 'Just now', type: 'Database' },
     { name: 'Starlink Telemetry', status: 'degraded', latency: '850ms', lastPing: '14 mins ago', type: 'External API' },
