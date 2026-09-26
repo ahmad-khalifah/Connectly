@@ -64,7 +64,7 @@ export async function POST(request: Request) {
         reference: reference,
       });
 
-      const finalStatus = isAuthorized ? 'success' : 'failed';
+      const finalStatus = isAuthorized ? 'completed' : 'failed';
 
       console.log('[WEBHOOK_UPDATING_PURCHASE]', {
         reference,
