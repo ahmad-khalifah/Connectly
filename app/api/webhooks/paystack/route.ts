@@ -73,10 +73,10 @@ export async function POST(request: Request) {
         finalStatus
       });
 
+      // Safe mode update: Only updating known, unconstrained columns
       const { data: updatedRecord, error: updateError } = await supabaseAdmin
         .from('purchases')
         .update({ 
-          status: finalStatus, // Ensure this is mapped to your correct ENUM (e.g., 'completed')
           net_amount_ngn: amountPaid,
           payment_gateway: 'paystack'
         })
