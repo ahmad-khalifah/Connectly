@@ -27,8 +27,7 @@ export default async function AdminDashboardOverview() {
     }
   );
 
-  // Fetch telemetry and business state concurrently
- const [
+  const [
     revenueData,
     customerCounts,
     activeSessions,
@@ -36,19 +35,21 @@ export default async function AdminDashboardOverview() {
     routersHealth,
     recentEvents
   ] = await Promise.all([
-    supabase.from('purchases').select('amount_paid, status, gateway_fee_ngn, net_amount_ngn, created_at').order('created_at', { ascending: false }),
+    // Removed the non-existent 'amount_paid' and 'status' columns to prevent query crashes
+    supabase.from('purchases').select('payment_gateway, gateway_fee_ngn, net_amount_ngn, created_at').order('created_at', { ascending: false }),
     supabase.from('subscriptions').select('id, status'),
     supabase.from('network_sessions').select('id', { count: 'exact' }).eq('status', 'active'),
     supabase.from('locations').select('id, name, status'),
     supabase.from('routers').select('id, identifier, status, cpu_usage_pct, wan_status'),
     supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(8)
   ]);
+
   console.log('RAW REVENUE DATA:', revenueData.data);
-  console.log('REVENUE FETCH ERROR:', revenueData.error);
+  if (revenueData.error) console.error('REVENUE FETCH ERROR:', revenueData.error);
 
   // Financial calculations
-  // Standardize the status string to lowercase before checking
-  const successfulPurchases = revenueData.data?.filter(p => Number(p.net_amount_ngn) > 0) || [];
+  // Only the successful Paystack webhook populates the payment_gateway column
+  const successfulPurchases = revenueData.data?.filter(p => p.payment_gateway === 'paystack') || [];
   
   const grossRevenue = successfulPurchases.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
   const totalFees = successfulPurchases.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);
