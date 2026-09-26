@@ -48,11 +48,9 @@ export default async function AdminDashboardOverview() {
 
   // Financial calculations
   // Standardize the status string to lowercase before checking
-  const successfulPurchases = revenueData.data?.filter(p => {
-    const status = (p.status || '').toLowerCase();
-    return status === 'paid' || status === 'success' || status === 'completed' || status === 'successful';
-  }) || [];
- const grossRevenue = successfulPurchases.reduce((acc, curr) => acc + Number(curr.amount_paid || 0), 0);
+  const successfulPurchases = revenueData.data?.filter(p => Number(p.net_amount_ngn) > 0) || [];
+  
+  const grossRevenue = successfulPurchases.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
   const totalFees = successfulPurchases.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);
   const netRevenue = grossRevenue - totalFees;
 
