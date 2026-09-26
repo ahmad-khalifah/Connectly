@@ -162,7 +162,7 @@ export default async function AdminDashboardOverview() {
 
       {/* Main Analytics Engine */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
-        <MetricTimelineChart />
+        <MetricTimelineChart transactions={successfulPurchases} />
       </div>
 
       {/* Split Operations: Live Feed & Hardware Matrix */}
