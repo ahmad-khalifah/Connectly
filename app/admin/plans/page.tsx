@@ -1,6 +1,6 @@
 import { CreditCard, Plus, Wifi, Zap, Smartphone } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
-import DeletePlanButton from './components/delete-plan-button'; // Adjust this import path to match your folder structure
+import DeletePlanButton from '../components/delete-plan-button'; // Adjust this import path to match your folder structure
 
 export const dynamic = 'force-dynamic';
 
