@@ -1,7 +1,5 @@
 import React from 'react';
-// DELETE THIS LINE: import { db } from '../../lib/db/client';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 import { 
   DollarSign, Users, Activity, Wifi, AlertTriangle, 
   ArrowUpRight, ArrowDownRight, Radio, Server, Clock 
@@ -12,21 +10,18 @@ import { MetricTimelineChart } from './components/metric-timeline-chart';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboardOverview() {
-  // Await the cookies function
-  const cookieStore = await cookies();
   
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-      },
-    }
-  );
+  // Initialize Supabase with the Service Role Key to bypass Row Level Security
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  if (!supabaseUrl || !supabaseRoleKey) {
+    return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+
+  // Fetch telemetry and business state concurrently
   const [
     revenueData,
     customerCounts,
@@ -35,7 +30,6 @@ export default async function AdminDashboardOverview() {
     routersHealth,
     recentEvents
   ] = await Promise.all([
-    // Removed the non-existent 'amount_paid' and 'status' columns to prevent query crashes
     supabase.from('purchases').select('payment_gateway, gateway_fee_ngn, net_amount_ngn, created_at').order('created_at', { ascending: false }),
     supabase.from('subscriptions').select('id, status'),
     supabase.from('network_sessions').select('id', { count: 'exact' }).eq('status', 'active'),
@@ -44,11 +38,7 @@ export default async function AdminDashboardOverview() {
     supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(8)
   ]);
 
-  console.log('RAW REVENUE DATA:', revenueData.data);
-  if (revenueData.error) console.error('REVENUE FETCH ERROR:', revenueData.error);
-
   // Financial calculations
-  // Only the successful Paystack webhook populates the payment_gateway column
   const successfulPurchases = revenueData.data?.filter(p => p.payment_gateway === 'paystack') || [];
   
   const grossRevenue = successfulPurchases.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
