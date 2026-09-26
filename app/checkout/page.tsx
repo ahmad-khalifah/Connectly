@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 
 interface CheckoutFormProps {
-  plan: { id: string; name: string; priceNaira: number };
-  phoneNumber: string;
-  locationSlug: string;
+  plan?: { id: string; name: string; priceNaira: number };
+  phoneNumber?: string;
+  locationSlug?: string;
 }
 
 export default function CheckoutForm({ plan, phoneNumber, locationSlug }: CheckoutFormProps) {
@@ -24,7 +24,7 @@ export default function CheckoutForm({ plan, phoneNumber, locationSlug }: Checko
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          planId: plan.id,
+          planId: plan?.id,
           phoneNumber,
           location_id: locationSlug, 
           macAddress: '00:00:00:00:00:00' 
@@ -49,7 +49,7 @@ export default function CheckoutForm({ plan, phoneNumber, locationSlug }: Checko
         ref: data.reference,
         currency: 'NGN',
         callback: () => {
-          router.push(`/connect?loc=${locationSlug}&status=success`);
+          router.push(`/connect?loc=${locationSlug || ''}&status=success`);
         },
         onClose: () => {
           setLoading(false);
@@ -72,10 +72,10 @@ export default function CheckoutForm({ plan, phoneNumber, locationSlug }: Checko
       
       <button
         onClick={handlePayment}
-        disabled={loading}
+        disabled={loading || !plan}
         className="w-full bg-[#6d1825] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#5a141e] transition-colors disabled:opacity-50"
       >
-        {loading ? 'Initializing...' : `Pay ₦${plan.priceNaira}`}
+        {loading ? 'Initializing...' : `Pay ₦${plan?.priceNaira || 0}`}
       </button>
     </div>
   );
