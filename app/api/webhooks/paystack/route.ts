@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js'; 
-// Note: You will replace this with your actual Mikrotik RouterOS API utility
 import { MockNetworkAdapter } from '../../../../lib/network/mock';
 
 export async function POST(request: Request) {
   try {
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    // 1. Explicitly validate environment variables before utilizing them
+    if (!secretKey || !supabaseUrl || !supabaseRoleKey) {
+      throw new Error('CRITICAL: Missing backend environment variables in Vercel.');
+    }
+
     const payload = await request.text();
     const signature = request.headers.get('x-paystack-signature');
-    const secretKey = process.env.PAYSTACK_SECRET_KEY!;
 
     const expectedSignature = crypto
       .createHmac('sha512', secretKey)
@@ -25,12 +32,8 @@ export async function POST(request: Request) {
       const reference = body.data.reference;
       const amountPaid = body.data.amount / 100;
 
-      const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
+      const supabaseAdmin = createClient(supabaseUrl, supabaseRoleKey);
 
-      // 1. Ensure phone_number is retrieved to generate the voucher
       const { data: purchase, error: fetchError } = await supabaseAdmin
         .from('purchases')
         .select('mac_address, location_id, plan_id, phone_number')
@@ -38,8 +41,7 @@ export async function POST(request: Request) {
         .single();
 
       if (fetchError || !purchase) {
-        console.error('Purchase not found for reference:', reference);
-        return NextResponse.json({ received: true });
+        throw new Error(`Purchase record not found in Supabase for reference: ${reference}`);
       }
 
       const { data: plan, error: planError } = await supabaseAdmin
@@ -49,17 +51,15 @@ export async function POST(request: Request) {
         .single();
 
       if (planError || !plan) {
-        throw new Error(`Plan details not found for purchase: ${reference}`);
+        throw new Error(`Plan details not found for plan_id: ${purchase.plan_id}`);
       }
 
       const expiresAt = new Date(Date.now() + plan.duration_seconds * 1000).toISOString();
 
-      // 2. Instruct the router to create a temporary Hotspot user instead of auto-authorizing the MAC
-      // The router must apply the limit-uptime using duration_seconds
       const isAuthorized = await MockNetworkAdapter.createHotspotUser({
         routerId: purchase.location_id,
-        username: purchase.phone_number,
-        password: purchase.phone_number,
+        username: purchase.phone_number || 'unknown_phone',
+        password: purchase.phone_number || 'unknown_phone',
         durationSeconds: plan.duration_seconds,
         reference: reference,
       });
@@ -75,12 +75,17 @@ export async function POST(request: Request) {
         })
         .eq('reference', reference);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        throw new Error(`Supabase update failed: ${updateError.message}`);
+      }
     }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
-    console.error('[PAYSTACK_WEBHOOK_ERROR]', error);
-    return NextResponse.json({ message: 'Webhook processing failed' }, { status: 500 });
+    // 2. Return the exact crash detail in the HTTP response body
+    return NextResponse.json({ 
+      error: 'Webhook processing failed', 
+      details: error.message || String(error) 
+    }, { status: 500 });
   }
 }
