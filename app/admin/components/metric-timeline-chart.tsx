@@ -92,10 +92,10 @@ export function MetricTimelineChart({ transactions = [] }: { transactions?: any[
                   tick={{ fontSize: 12, fill: '#64748b' }}
                   tickFormatter={(value) => `₦${value.toLocaleString()}`}
                 />
-                <Tooltip 
+               <Tooltip 
                   cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`₦${value.toLocaleString('en-NG')}`, 'Revenue']}
+                  formatter={(value: any) => [`₦${Number(value || 0).toLocaleString('en-NG')}`, 'Revenue']}
                 />
                 <Bar dataKey="amount" fill="#6d1825" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
