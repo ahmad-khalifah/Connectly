@@ -76,9 +76,8 @@ export async function POST(request: Request) {
       const { data: updatedRecord, error: updateError } = await supabaseAdmin
         .from('purchases')
         .update({ 
-          status: finalStatus, 
+          status: finalStatus, // Ensure this is mapped to your correct ENUM (e.g., 'completed')
           net_amount_ngn: amountPaid,
-          expires_at: expiresAt,
           payment_gateway: 'paystack'
         })
         .eq('reference', reference)
