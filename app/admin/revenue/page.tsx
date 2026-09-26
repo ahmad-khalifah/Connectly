@@ -1,18 +1,30 @@
-import { db } from '@/lib/db/client';
 import { TrendingUp, DollarSign, PieChart, Activity } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RevenueAnalyticsPage() {
-  const { data: revenueData } = await db
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseRoleKey) {
+    return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+
+  const { data: revenueData, error } = await supabase
     .from('purchases')
-    .select('amount, gateway_fee_ngn, net_amount_ngn, status, created_at, plans(name), locations(name)')
-    .in('status', ['paid', 'success']);
+    .select('gateway_fee_ngn, net_amount_ngn, payment_gateway, created_at, plans(name), locations(name)')
+    .eq('payment_gateway', 'paystack');
+
+  if (error) console.error('[REVENUE_FETCH_ERROR]', error);
 
   const transactions = revenueData || [];
-  const grossRevenue = transactions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+  
+  const netRevenue = transactions.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
   const totalFees = transactions.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);
-  const netRevenue = grossRevenue - totalFees;
+  const grossRevenue = netRevenue + totalFees;
   const avgTransactionValue = transactions.length > 0 ? grossRevenue / transactions.length : 0;
 
   return (

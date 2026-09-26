@@ -1,6 +1,6 @@
-import { db } from '@/lib/db/client';
 import { ArrowLeftRight, Search, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,17 +16,25 @@ export default async function TransactionsPage({
   const from = (currentPage - 1) * ITEMS_PER_PAGE;
   const to = from + ITEMS_PER_PAGE - 1;
 
-  let query = db
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseRoleKey) {
+    return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+
+  // Removed non-existent columns (amount, status) and fixed the phone_number fetch
+  let query = supabase
     .from('purchases')
     .select(`
       id,
-      amount,
       gateway_fee_ngn,
       net_amount_ngn,
-      status,
       payment_gateway,
       created_at,
-      customers(phone_number),
+      phone_number,
       locations(name)
     `, { count: 'exact' })
     .order('created_at', { ascending: false });
@@ -35,19 +43,20 @@ export default async function TransactionsPage({
     // Search implementation pending
   }
 
-  const { data: transactions, count } = await query.range(from, to);
+  const { data: transactions, count, error } = await query.range(from, to);
+  
+  if (error) {
+    console.error('[TRANSACTIONS_FETCH_ERROR]', error);
+  }
+
   const totalPages = count ? Math.ceil(count / ITEMS_PER_PAGE) : 1;
 
-  const renderStatus = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'paid':
-      case 'success':
-        return <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-emerald-200"><CheckCircle2 className="h-3 w-3" /> Success</span>;
-      case 'failed':
-        return <span className="flex items-center gap-1 text-red-600 bg-red-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-red-200"><XCircle className="h-3 w-3" /> Failed</span>;
-      default:
-        return <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-amber-200"><Clock className="h-3 w-3" /> Pending</span>;
+  // Status is now derived from the presence of the payment_gateway string
+  const renderStatus = (gateway: string) => {
+    if (gateway === 'paystack') {
+      return <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-emerald-200"><CheckCircle2 className="h-3 w-3" /> Success</span>;
     }
+    return <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-amber-200"><Clock className="h-3 w-3" /> Pending</span>;
   };
 
   return (
@@ -75,12 +84,12 @@ export default async function TransactionsPage({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {transactions?.map((tx) => {
-              // Extract values to handle Supabase array/object type mismatch
-              const cust = tx.customers as any;
-              const phone = Array.isArray(cust) ? cust[0]?.phone_number : cust?.phone_number;
-
               const loc = tx.locations as any;
               const locName = Array.isArray(loc) ? loc[0]?.name : loc?.name;
+              
+              const netAmount = Number(tx.net_amount_ngn || 0);
+              const feeAmount = Number(tx.gateway_fee_ngn || 0);
+              const grossAmount = netAmount + feeAmount;
 
               return (
                 <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
@@ -88,17 +97,17 @@ export default async function TransactionsPage({
                     {new Date(tx.created_at).toLocaleString('en-NG')}
                   </td>
                   <td className="px-6 py-4 font-mono font-bold text-slate-900">
-                    {phone || 'Unknown'}
+                    {tx.phone_number || 'Unknown'}
                   </td>
                   <td className="px-6 py-4 text-xs text-slate-500">
                     {locName || 'Remote'}
                   </td>
-                  <td className="px-6 py-4">{renderStatus(tx.status)}</td>
+                  <td className="px-6 py-4">{renderStatus(tx.payment_gateway)}</td>
                   <td className="px-6 py-4 text-right font-mono font-bold text-slate-900">
-                    ₦{Number(tx.amount || 0).toLocaleString('en-NG')}
+                    ₦{grossAmount.toLocaleString('en-NG')}
                   </td>
                   <td className="px-6 py-4 text-right font-mono font-bold text-emerald-700">
-                    ₦{Number(tx.net_amount_ngn || tx.amount || 0).toLocaleString('en-NG')}
+                    ₦{netAmount.toLocaleString('en-NG')}
                   </td>
                 </tr>
               );

@@ -1,11 +1,24 @@
-import { db } from '@/lib/db/client';
-import { Receipt, Plus, Filter } from 'lucide-react';
+import { Receipt } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+export const dynamic = 'force-dynamic';
 
 export default async function ExpensesPage() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseRoleKey) {
+    return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+
   const [expensesRes, locationsRes] = await Promise.all([
-    db.from('expenses').select('*, locations(name)').order('expense_date', { ascending: false }),
-    db.from('locations').select('id, name')
+    supabase.from('expenses').select('*, locations(name)').order('expense_date', { ascending: false }),
+    supabase.from('locations').select('id, name')
   ]);
+
+  if (expensesRes.error) console.error('[EXPENSES_FETCH_ERROR]', expensesRes.error);
 
   const expenses = expensesRes.data || [];
   const totalOpex = expenses.reduce((acc, curr) => acc + Number(curr.amount_ngn), 0);
