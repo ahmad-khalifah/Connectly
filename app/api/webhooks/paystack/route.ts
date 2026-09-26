@@ -77,8 +77,9 @@ export async function POST(request: Request) {
         .from('purchases')
         .update({ 
           status: finalStatus, 
-          amount_paid: amountPaid,
-          expires_at: expiresAt
+          net_amount_ngn: amountPaid,
+          expires_at: expiresAt,
+          payment_gateway: 'paystack'
         })
         .eq('reference', reference)
         .select();
