@@ -46,10 +46,10 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (insertError || !insertedRow) {
-      console.error('[SUPABASE_INSERT_ERROR]', insertError);
-      throw new Error(`Database failed to create purchase record: ${insertError.message}`);
-    }
+      if (insertError || !insertedRow) {
+        console.error('[SUPABASE_INSERT_ERROR]', insertError);
+        throw new Error(`Database failed to create purchase record: ${insertError?.message || 'Unknown database error'}`);
+      }
 
     return NextResponse.json({ 
       reference,
