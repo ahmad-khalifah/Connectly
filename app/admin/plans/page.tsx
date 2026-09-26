@@ -1,6 +1,7 @@
 import { CreditCard, Plus, Wifi, Zap, Smartphone } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
-import DeletePlanButton from '../components/delete-plan-button'; // Adjust this import path to match your folder structure
+import Link from 'next/link';
+import DeletePlanButton from '../components/delete-plan-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,6 @@ export default async function PlansPage() {
 
   const supabase = createClient(supabaseUrl, supabaseRoleKey);
 
-  // Fetch using the exact columns mapped in your PlanForm
   const { data: plans, error } = await supabase
     .from('plans')
     .select(`
@@ -32,7 +32,6 @@ export default async function PlansPage() {
 
   if (error) console.error('[PLANS_FETCH_ERROR]', error);
 
-  // Convert raw database values back to UI-friendly formats (Naira, Hours, Mbps)
   const formattedPlans = plans?.map(plan => {
     const subsArray = Array.isArray(plan.subscriptions) ? plan.subscriptions : [];
     return { 
@@ -54,7 +53,6 @@ export default async function PlansPage() {
           </h1>
           <p className="text-sm text-slate-500">Manage internet access tiers, speed limits, and roaming constraints.</p>
         </div>
-        {/* Note: You will need to wrap this button in a client component or link it to a modal to display your PlanForm */}
         <Link 
           href="/admin/plans/new" 
           className="flex items-center gap-2 px-4 py-2 bg-[#6d1825] text-white text-sm font-semibold rounded-lg hover:bg-[#5a141e] transition-colors"
@@ -73,7 +71,6 @@ export default async function PlansPage() {
                   Disabled
                 </span>
               )}
-              {/* Inserted the Delete Button Here */}
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                 <DeletePlanButton planId={plan.id} />
               </div>
