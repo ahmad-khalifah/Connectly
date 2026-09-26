@@ -59,7 +59,7 @@ export default function AdminLoginPage() {
         <div className="bg-white py-8 px-4 shadow-sm sm:rounded-xl sm:px-10 border border-slate-200">
           <form className="space-y-6" onSubmit={handleLogin}>
             <div>
-              <label className="block text-sm font-medium text-slate-700">Operator Email</label>
+              <label className="block text-sm font-medium text-slate-700">Admin Email</label>
               <div className="mt-1">
                 <input
                   type="email"
