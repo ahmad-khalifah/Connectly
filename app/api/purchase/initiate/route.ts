@@ -9,10 +9,14 @@ export async function POST(request: Request) {
       throw new Error('Missing required payload parameters.');
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseRoleKey) {
+      throw new Error('Missing Supabase environment variables in Vercel.');
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseRoleKey);
 
     const { data: plan, error: planError } = await supabaseAdmin
       .from('plans')
@@ -26,10 +30,9 @@ export async function POST(request: Request) {
 
     const priceInNaira = plan.price_kobo / 100;
     const reference = `TRX_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    
-    // Paystack strict requirement: Generate a dummy email if you only collect phone numbers
     const paystackEmail = `${phoneNumber}@connectly.app`;
 
+    // Strip unconstrained columns and match exact Supabase schema
     const { data: insertedRow, error: insertError } = await supabaseAdmin
       .from('purchases')
       .insert({
@@ -38,18 +41,16 @@ export async function POST(request: Request) {
         phone_number: phoneNumber,
         location_id: location_id,
         mac_address: macAddress || '00:00:00:00:00:00',
-        status: 'pending',
-        amount_paid: priceInNaira, 
+        net_amount_ngn: priceInNaira, 
       })
       .select()
       .single();
 
     if (insertError || !insertedRow) {
-      console.error('Supabase Insert Error:', insertError);
-      throw new Error('Database failed to create purchase record.');
+      console.error('[SUPABASE_INSERT_ERROR]', insertError);
+      throw new Error(`Database failed to create purchase record: ${insertError.message}`);
     }
 
-    // Return the specific values react-paystack needs to launch the modal
     return NextResponse.json({ 
       reference,
       amount_kobo: plan.price_kobo,
