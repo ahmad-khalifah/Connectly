@@ -1,10 +1,10 @@
-export interface AuthorizationParams {
-    macAddress: string;
-    ipAddress?: string;
-    rateLimit?: string; // e.g., "5M/10M"
-    routerId: string;
-    reference: string;
-  }
+createHotspotUser?: (params: {
+  routerId: string;
+  username: string;
+  password?: string;
+  durationSeconds: number;
+  reference: string;
+}) => Promise<boolean>;
   
   export interface NetworkAdapter {
     authorizeDevice: (params: AuthorizationParams) => Promise<boolean>;

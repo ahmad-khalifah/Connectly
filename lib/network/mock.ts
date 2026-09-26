@@ -5,17 +5,34 @@ export const MockNetworkAdapter: NetworkAdapter = {
     console.log(`[MOCK NETWORK] Authorizing device ${params.macAddress} on router ${params.routerId}`);
     console.log(`[MOCK NETWORK] Rate Limit: ${params.rateLimit || 'unlimited'} | Ref: ${params.reference}`);
     
-    // Simulate a realistic network delay (2 seconds) so your UI loading state is visible
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // Force the "Manual Fallback" error state if this specific MAC or reference is used
-    // (If your params include the phone number, you can change this to check params.phone === '08099999999')
     if (params.macAddress === '00:00:00:00:00:00' || params.reference === 'test_fail') {
       console.log(`[MOCK NETWORK] ❌ Simulating Mikrotik API failure.`);
       return false; 
     }
 
     console.log(`[MOCK NETWORK] ✅ Authorized successfully.`);
+    return true;
+  },
+
+  createHotspotUser: async (params: {
+    routerId: string;
+    username: string;
+    password?: string;
+    durationSeconds: number;
+    reference: string;
+  }) => {
+    console.log(`[MOCK NETWORK] Creating hotspot user for ${params.username} on router ${params.routerId}`);
+    
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    if (params.username === '08099999999' || params.reference === 'test_fail') {
+      console.log(`[MOCK NETWORK] ❌ Simulating Mikrotik API failure.`);
+      return false; 
+    }
+
+    console.log(`[MOCK NETWORK] ✅ Hotspot user created successfully.`);
     return true;
   },
 
