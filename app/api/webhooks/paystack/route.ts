@@ -66,23 +66,34 @@ export async function POST(request: Request) {
 
       const finalStatus = isAuthorized ? 'success' : 'failed';
 
-      const { error: updateError } = await supabaseAdmin
+      console.log('[WEBHOOK_UPDATING_PURCHASE]', {
+        reference,
+        amountPaid,
+        expiresAt,
+        finalStatus
+      });
+
+      const { data: updatedRecord, error: updateError } = await supabaseAdmin
         .from('purchases')
         .update({ 
           status: finalStatus, 
           amount_paid: amountPaid,
           expires_at: expiresAt
         })
-        .eq('reference', reference);
+        .eq('reference', reference)
+        .select();
 
       if (updateError) {
-        throw new Error(`Supabase update failed: ${updateError.message}`);
+        console.error('[SUPABASE_UPDATE_ERROR]', updateError);
+        throw new Error(`Supabase update failed: ${updateError.message} (${updateError.code})`);
       }
+
+      console.log('[SUPABASE_UPDATE_SUCCESS]', updatedRecord);
     }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
-    // 2. Return the exact crash detail in the HTTP response body
+    console.error('[CRITICAL_WEBHOOK_FAILURE]', error.message || error);
     return NextResponse.json({ 
       error: 'Webhook processing failed', 
       details: error.message || String(error) 
