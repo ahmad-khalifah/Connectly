@@ -106,7 +106,9 @@ export async function POST(request: Request) {
         .insert({
           customer_id: customerId,
           location_id: purchase.location_id,
-          status: 'active'
+          status: 'active',
+          mac_address: purchase.mac_address || '00:00:00:00:00:00',
+          started_at: now
         });
 
       if (sessionError) throw new Error(`Session insert failed: ${sessionError.message}`);
@@ -116,14 +118,14 @@ export async function POST(request: Request) {
         .from('purchases')
         .update({ 
           net_amount_ngn: amountPaid,
-          payment_gateway: 'paystack'
+          payment_gateway: 'paystack',
+          status: 'success'
         })
         .eq('reference', reference);
 
       if (updateError) {
         throw new Error(`Supabase purchase update failed: ${updateError.message}`);
       }
-    }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
