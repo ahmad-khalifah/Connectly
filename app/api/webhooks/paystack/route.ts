@@ -97,10 +97,13 @@ export async function POST(request: Request) {
         .eq('reference', reference)
         .maybeSingle();
 
+      const now = new Date().toISOString();
+
       const subPayload = {
         customer_id: customerId,
         plan_id: purchase.plan_id,
         status: 'active',
+        starts_at: now, // Restored missing constraint
         expires_at: expiresAt,
         reference: reference
       };
@@ -118,14 +121,15 @@ export async function POST(request: Request) {
         if (insertSubError) throw new Error(`Subscription insert failed: ${insertSubError.message}`);
       }
 
-      // 3. Insert Active Network Session (No started_at column)
+      // 3. Insert Active Network Session
       const { error: sessionError } = await supabaseAdmin
         .from('network_sessions')
         .insert({
           customer_id: customerId,
           location_id: purchase.location_id,
           status: 'active',
-          mac_address: purchase.mac_address || '00:00:00:00:00:00'
+          mac_address: purchase.mac_address || '00:00:00:00:00:00',
+          reference: reference // Added to satisfy potential missing constraint
         });
 
       if (sessionError) throw new Error(`Session insert failed: ${sessionError.message}`);
