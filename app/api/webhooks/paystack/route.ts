@@ -126,6 +126,7 @@ export async function POST(request: Request) {
       if (updateError) {
         throw new Error(`Supabase purchase update failed: ${updateError.message}`);
       }
+    }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
