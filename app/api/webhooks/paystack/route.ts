@@ -35,12 +35,17 @@ export async function POST(request: Request) {
 
       const { data: purchase, error: fetchError } = await supabaseAdmin
         .from('purchases')
-        .select('mac_address, location_id, plan_id, phone_number')
+        .select('mac_address, location_id, plan_id, phone_number, status') // Added status
         .eq('reference', reference)
         .single();
 
       if (fetchError || !purchase) {
         throw new Error(`Purchase record not found in Supabase for reference: ${reference}`);
+      }
+
+      // Exit early if Paystack is retrying a webhook we already completed
+      if (purchase.status === 'success') {
+        return NextResponse.json({ received: true });
       }
 
       const { data: plan, error: planError } = await supabaseAdmin
@@ -85,21 +90,21 @@ export async function POST(request: Request) {
         customerId = newCustomer.id;
       }
 
-      // 2. Insert Active Subscription
+      // 2. Upsert Active Subscription
       const now = new Date().toISOString();
       const { error: subError } = await supabaseAdmin
         .from('subscriptions')
-        .insert({
+        .upsert({
           customer_id: customerId,
           plan_id: purchase.plan_id,
           status: 'active',
           starts_at: now,
           expires_at: expiresAt,
           reference: reference
-        });
+        }, { onConflict: 'reference' });
       
-      if (subError) throw new Error(`Subscription insert failed: ${subError.message}`);
-
+      if (subError) throw new Error(`Subscription upsert failed: ${subError.message}`);
+      
       // 3. Insert Active Network Session
       const { error: sessionError } = await supabaseAdmin
         .from('network_sessions')
