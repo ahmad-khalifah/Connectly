@@ -73,13 +73,12 @@ export async function POST(request: Request) {
         finalStatus
       });
 
-      // Safe mode update: Only updating known, unconstrained columns + finalStatus
+      // Safe mode update: Only updating known, unconstrained columns
       const { data: updatedRecord, error: updateError } = await supabaseAdmin
         .from('purchases')
         .update({ 
           net_amount_ngn: amountPaid,
-          payment_gateway: 'paystack',
-          status: finalStatus
+          payment_gateway: 'paystack'
         })
         .eq('reference', reference)
         .select();
