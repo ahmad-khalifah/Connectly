@@ -9,7 +9,6 @@ export async function POST(request: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // 1. Explicitly validate environment variables before utilizing them
     if (!secretKey || !supabaseUrl || !supabaseRoleKey) {
       throw new Error('CRITICAL: Missing backend environment variables in Vercel.');
     }
@@ -55,40 +54,72 @@ export async function POST(request: Request) {
       }
 
       const expiresAt = new Date(Date.now() + plan.duration_seconds * 1000).toISOString();
+      const phone = purchase.phone_number || 'unknown_phone';
 
       const isAuthorized = await MockNetworkAdapter.createHotspotUser({
         routerId: purchase.location_id,
-        username: purchase.phone_number || 'unknown_phone',
-        password: purchase.phone_number || 'unknown_phone',
+        username: phone,
+        password: phone,
         durationSeconds: plan.duration_seconds,
         reference: reference,
       });
 
-      const finalStatus = isAuthorized ? 'completed' : 'failed';
+      // 1. Get or Create Customer Profile
+      let customerId;
+      const { data: existingCustomer } = await supabaseAdmin
+        .from('customers')
+        .select('id')
+        .eq('phone_number', phone)
+        .single();
 
-      console.log('[WEBHOOK_UPDATING_PURCHASE]', {
-        reference,
-        amountPaid,
-        expiresAt,
-        finalStatus
-      });
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+      } else {
+        const { data: newCustomer, error: customerError } = await supabaseAdmin
+          .from('customers')
+          .insert({ phone_number: phone })
+          .select('id')
+          .single();
+        
+        if (customerError) throw new Error(`Customer creation failed: ${customerError.message}`);
+        customerId = newCustomer.id;
+      }
 
-      // Safe mode update: Only updating known, unconstrained columns
-      const { data: updatedRecord, error: updateError } = await supabaseAdmin
+      // 2. Insert Active Subscription
+      const { error: subError } = await supabaseAdmin
+        .from('subscriptions')
+        .insert({
+          customer_id: customerId,
+          plan_id: purchase.plan_id,
+          status: 'active',
+          expires_at: expiresAt
+        });
+      
+      if (subError) throw new Error(`Subscription insert failed: ${subError.message}`);
+
+      // 3. Insert Active Network Session
+      const { error: sessionError } = await supabaseAdmin
+        .from('network_sessions')
+        .insert({
+          customer_id: customerId,
+          location_id: purchase.location_id,
+          status: 'active'
+        });
+
+      if (sessionError) throw new Error(`Session insert failed: ${sessionError.message}`);
+
+      // 4. Update Original Purchase Record
+      const { error: updateError } = await supabaseAdmin
         .from('purchases')
         .update({ 
           net_amount_ngn: amountPaid,
           payment_gateway: 'paystack'
         })
-        .eq('reference', reference)
-        .select();
+        .eq('reference', reference);
 
       if (updateError) {
-        console.error('[SUPABASE_UPDATE_ERROR]', updateError);
-        throw new Error(`Supabase update failed: ${updateError.message} (${updateError.code})`);
+        throw new Error(`Supabase purchase update failed: ${updateError.message}`);
       }
-
-      console.log('[SUPABASE_UPDATE_SUCCESS]', updatedRecord);
     }
 
     return NextResponse.json({ received: true });

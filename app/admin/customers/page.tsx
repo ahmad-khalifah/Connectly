@@ -1,6 +1,6 @@
-import { db } from '@/lib/db/client';
-import { Users, Search, Wifi, Clock, MoreVertical, CreditCard } from 'lucide-react';
+import { Users, Search, CreditCard, MoreVertical } from 'lucide-react';
 import Link from 'next/link';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +16,17 @@ export default async function CustomersPage({
   const from = (currentPage - 1) * ITEMS_PER_PAGE;
   const to = from + ITEMS_PER_PAGE - 1;
 
-  // Build the query
-  let query = db
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseRoleKey) {
+    return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+
+  // Build the query using admin client to bypass RLS
+  let query = supabase
     .from('customers')
     .select(`
       id,
@@ -32,7 +41,10 @@ export default async function CustomersPage({
     query = query.ilike('phone_number', `%${searchQuery}%`);
   }
 
-  const { data: customers, count } = await query.range(from, to);
+  const { data: customers, count, error } = await query.range(from, to);
+
+  if (error) console.error('[CUSTOMERS_FETCH_ERROR]', error);
+
   const totalPages = count ? Math.ceil(count / ITEMS_PER_PAGE) : 1;
 
   // Format data for the operational table
@@ -133,7 +145,6 @@ export default async function CustomersPage({
           </tbody>
         </table>
         
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50">
             <Link 
