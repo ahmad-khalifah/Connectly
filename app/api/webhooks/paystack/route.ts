@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         username: phone,
         password: phone,
         durationSeconds: plan.duration_seconds,
-        reference: reference,
+        reference: reference
       });
 
       // 1. Get or Create Customer Profile

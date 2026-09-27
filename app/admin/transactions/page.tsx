@@ -107,9 +107,9 @@ export default async function TransactionsPage({
                   <td className="px-6 py-4 text-right font-mono font-bold text-slate-900">
                     ₦{grossAmount.toLocaleString('en-NG')}
                   </td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-emerald-700">
-                    ₦{netAmount.toLocaleString('en-NG')}
-                  </td>
+                  <td className="px-6 py-4 text-xs font-mono text-slate-500">
+  {new Date(tx.created_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })}
+</td>
                 </tr>
               );
             })}
