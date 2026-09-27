@@ -121,7 +121,7 @@ export async function POST(request: Request) {
         if (insertSubError) throw new Error(`Subscription insert failed: ${insertSubError.message}`);
       }
 
-      // 3. Insert Active Network Session (Satisfying exact schema constraints)
+      // 3. Insert Active Network Session 
       const { error: sessionError } = await supabaseAdmin
         .from('network_sessions')
         .insert({
@@ -140,13 +140,14 @@ export async function POST(request: Request) {
         .update({ 
           net_amount_ngn: amountPaid,
           payment_gateway: 'paystack',
-          status: 'completed' // Changed from 'success' to match your ENUM
+          status: 'completed'
         })
         .eq('reference', reference);
 
       if (updateError) {
         throw new Error(`Supabase purchase update failed: ${updateError.message}`);
       }
+    }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
