@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
       const { data: purchase, error: fetchError } = await supabaseAdmin
         .from('purchases')
-        .select('mac_address, location_id, plan_id, phone_number, status') // Added status
+        .select('mac_address, location_id, plan_id, phone_number, status')
         .eq('reference', reference)
         .single();
 
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       const expiresAt = new Date(Date.now() + plan.duration_seconds * 1000).toISOString();
       const phone = purchase.phone_number || 'unknown_phone';
 
-      const isAuthorized = await MockNetworkAdapter.createHotspotUser({
+      await MockNetworkAdapter.createHotspotUser({
         routerId: purchase.location_id,
         username: phone,
         password: phone,
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
         customerId = newCustomer.id;
       }
 
-      // 2. Upsert Active Subscription
+      // 2. Upsert Active Subscription (Handles Paystack Retries)
       const now = new Date().toISOString();
       const { error: subError } = await supabaseAdmin
         .from('subscriptions')
@@ -104,21 +104,20 @@ export async function POST(request: Request) {
         }, { onConflict: 'reference' });
       
       if (subError) throw new Error(`Subscription upsert failed: ${subError.message}`);
-      
-      // 3. Insert Active Network Session
+
+      // 3. Insert Active Network Session (Removed non-existent started_at column)
       const { error: sessionError } = await supabaseAdmin
         .from('network_sessions')
         .insert({
           customer_id: customerId,
           location_id: purchase.location_id,
           status: 'active',
-          mac_address: purchase.mac_address || '00:00:00:00:00:00',
-          started_at: now
+          mac_address: purchase.mac_address || '00:00:00:00:00:00'
         });
 
       if (sessionError) throw new Error(`Session insert failed: ${sessionError.message}`);
 
-      // 4. Update Original Purchase Record
+      // 4. Update Original Purchase Record to Success
       const { error: updateError } = await supabaseAdmin
         .from('purchases')
         .update({ 
