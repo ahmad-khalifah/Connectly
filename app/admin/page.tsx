@@ -11,7 +11,6 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboardOverview() {
   
-  // Initialize Supabase with the Service Role Key to bypass Row Level Security
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -21,7 +20,6 @@ export default async function AdminDashboardOverview() {
 
   const supabase = createClient(supabaseUrl, supabaseRoleKey);
 
-  // Fetch telemetry and business state concurrently
   const [
     revenueData,
     customerCounts,
@@ -30,7 +28,8 @@ export default async function AdminDashboardOverview() {
     routersHealth,
     recentEvents
   ] = await Promise.all([
-    supabase.from('purchases').select('payment_gateway, gateway_fee_ngn, net_amount_ngn, created_at').order('created_at', { ascending: false }),
+    // Added 'status' back to the select statement here
+    supabase.from('purchases').select('status, gateway_fee_ngn, net_amount_ngn, created_at').order('created_at', { ascending: false }),
     supabase.from('subscriptions').select('id, status'),
     supabase.from('network_sessions').select('id', { count: 'exact' }).eq('status', 'active'),
     supabase.from('locations').select('id, name, status'),
@@ -38,14 +37,13 @@ export default async function AdminDashboardOverview() {
     supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(8)
   ]);
 
-  // Financial calculations
-  const successfulPurchases = revenueData.data?.filter(p => p.payment_gateway === 'paystack') || [];
+  // Filter precisely by the 'completed' status ENUM we fixed in the webhook
+  const successfulPurchases = revenueData.data?.filter(p => p.status === 'completed') || [];
   
   const grossRevenue = successfulPurchases.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
   const totalFees = successfulPurchases.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);
   const netRevenue = grossRevenue - totalFees;
 
-  // Network infrastructure stats
   const totalLocations = locationsHealth.data?.length || 0;
   const offlineLocations = locationsHealth.data?.filter(l => l.status === 'offline').length || 0;
   const totalRouters = routersHealth.data?.length || 0;
@@ -56,7 +54,6 @@ export default async function AdminDashboardOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">System Operations Console</h1>
@@ -70,10 +67,8 @@ export default async function AdminDashboardOverview() {
         </div>
       </div>
 
-      {/* Primary KPI Command Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* Module A: Financial Position */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
           <div className="flex justify-between items-start mb-4">
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Revenue Operations</h2>
@@ -99,7 +94,6 @@ export default async function AdminDashboardOverview() {
           </div>
         </div>
 
-        {/* Module B: Subscriber Base */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
           <div className="flex justify-between items-start mb-4">
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Subscribers & Sessions</h2>
@@ -128,7 +122,6 @@ export default async function AdminDashboardOverview() {
           </div>
         </div>
 
-        {/* Module C: Hardware & Backhaul Health */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
           <div className="flex justify-between items-start mb-4">
             <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Network Integrity</h2>
@@ -160,14 +153,11 @@ export default async function AdminDashboardOverview() {
 
       </div>
 
-      {/* Main Analytics Engine */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
         <MetricTimelineChart transactions={successfulPurchases} />
       </div>
 
-      {/* Split Operations: Live Feed & Hardware Matrix */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Real-time Event Stream */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
@@ -180,7 +170,6 @@ export default async function AdminDashboardOverview() {
           </div>
         </div>
 
-        {/* Physical Node Health */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-200 bg-slate-50">
             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">

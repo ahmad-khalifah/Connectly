@@ -25,7 +25,7 @@ export default async function TransactionsPage({
 
   const supabase = createClient(supabaseUrl, supabaseRoleKey);
 
-  // Removed non-existent columns (amount, status) and fixed the phone_number fetch
+  // Added 'status' back to the select array since we know it exists
   let query = supabase
     .from('purchases')
     .select(`
@@ -35,12 +35,13 @@ export default async function TransactionsPage({
       payment_gateway,
       created_at,
       phone_number,
+      status, 
       locations(name)
     `, { count: 'exact' })
     .order('created_at', { ascending: false });
 
   if (searchQuery) {
-    // Search implementation pending
+    query = query.ilike('phone_number', `%${searchQuery}%`);
   }
 
   const { data: transactions, count, error } = await query.range(from, to);
@@ -51,12 +52,12 @@ export default async function TransactionsPage({
 
   const totalPages = count ? Math.ceil(count / ITEMS_PER_PAGE) : 1;
 
-  // Status is now derived from the presence of the payment_gateway string
-  const renderStatus = (gateway: string) => {
-    if (gateway === 'paystack') {
-      return <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-emerald-200"><CheckCircle2 className="h-3 w-3" /> Success</span>;
+  // Accurately render based on the actual database status ENUM
+  const renderStatus = (status: string) => {
+    if (status === 'completed') {
+      return <span className="flex items-center w-fit gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-emerald-200"><CheckCircle2 className="h-3 w-3" /> Success</span>;
     }
-    return <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-amber-200"><Clock className="h-3 w-3" /> Pending</span>;
+    return <span className="flex items-center w-fit gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-amber-200"><Clock className="h-3 w-3" /> Pending</span>;
   };
 
   return (
@@ -102,7 +103,7 @@ export default async function TransactionsPage({
                   <td className="px-6 py-4 text-xs text-slate-500">
                     {locName || 'Remote'}
                   </td>
-                  <td className="px-6 py-4">{renderStatus(tx.payment_gateway)}</td>
+                  <td className="px-6 py-4">{renderStatus(tx.status)}</td>
                   <td className="px-6 py-4 text-right font-mono font-bold text-slate-900">
                     ₦{grossAmount.toLocaleString('en-NG')}
                   </td>
