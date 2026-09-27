@@ -90,22 +90,35 @@ export async function POST(request: Request) {
         customerId = newCustomer.id;
       }
 
-      // 2. Upsert Active Subscription (Handles Paystack Retries)
-      const now = new Date().toISOString();
-      const { error: subError } = await supabaseAdmin
+      // 2. Safely Handle Subscription (Manual Check to bypass Upsert unique constraint issues)
+      const { data: existingSub } = await supabaseAdmin
         .from('subscriptions')
-        .upsert({
-          customer_id: customerId,
-          plan_id: purchase.plan_id,
-          status: 'active',
-          starts_at: now,
-          expires_at: expiresAt,
-          reference: reference
-        }, { onConflict: 'reference' });
-      
-      if (subError) throw new Error(`Subscription upsert failed: ${subError.message}`);
+        .select('id')
+        .eq('reference', reference)
+        .maybeSingle();
 
-      // 3. Insert Active Network Session (Removed non-existent started_at column)
+      const subPayload = {
+        customer_id: customerId,
+        plan_id: purchase.plan_id,
+        status: 'active',
+        expires_at: expiresAt,
+        reference: reference
+      };
+
+      if (existingSub) {
+        const { error: updateSubError } = await supabaseAdmin
+          .from('subscriptions')
+          .update(subPayload)
+          .eq('reference', reference);
+        if (updateSubError) throw new Error(`Subscription update failed: ${updateSubError.message}`);
+      } else {
+        const { error: insertSubError } = await supabaseAdmin
+          .from('subscriptions')
+          .insert(subPayload);
+        if (insertSubError) throw new Error(`Subscription insert failed: ${insertSubError.message}`);
+      }
+
+      // 3. Insert Active Network Session (No started_at column)
       const { error: sessionError } = await supabaseAdmin
         .from('network_sessions')
         .insert({
