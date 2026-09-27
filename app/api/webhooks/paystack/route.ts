@@ -85,13 +85,18 @@ export async function POST(request: Request) {
         customerId = newCustomer.id;
       }
 
-      SEP 27 09:58:50.03
-      POST
-      500
-      www.getconnectly.net
-      /api/webhooks/paystack
-      3
-      [CRITICAL_WEBHOOK_FAILURE] Subscription insert failed: null value in column "starts_at" of relation "subscriptions" violates not-null constraint
+      // 2. Insert Active Subscription
+      const now = new Date().toISOString();
+      const { error: subError } = await supabaseAdmin
+        .from('subscriptions')
+        .insert({
+          customer_id: customerId,
+          plan_id: purchase.plan_id,
+          status: 'active',
+          starts_at: now,
+          expires_at: expiresAt,
+          reference: reference
+        });
       
       if (subError) throw new Error(`Subscription insert failed: ${subError.message}`);
 
