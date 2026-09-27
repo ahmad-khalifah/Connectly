@@ -13,8 +13,6 @@ export default async function CustomersPage({
   const currentPage = Number(resolvedParams.page) || 1;
   const searchQuery = resolvedParams.search || '';
   const ITEMS_PER_PAGE = 20;
-  const from = (currentPage - 1) * ITEMS_PER_PAGE;
-  const to = from + ITEMS_PER_PAGE - 1;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -25,46 +23,60 @@ export default async function CustomersPage({
 
   const supabase = createClient(supabaseUrl, supabaseRoleKey);
 
-  // Build the query using admin client to bypass RLS
-  let query = supabase
-    .from('customers')
+  // Fetch successful purchases to derive customer states
+  const { data: purchases, error } = await supabase
+    .from('purchases')
     .select(`
       id,
       phone_number,
       created_at,
-      subscriptions (id, status, expires_at, plans(name)),
-      network_sessions (id, status, location_id, locations(name))
-    `, { count: 'exact' })
+      payment_gateway,
+      plans(name, duration_seconds),
+      locations(name)
+    `)
+    .eq('payment_gateway', 'paystack')
     .order('created_at', { ascending: false });
 
+  if (error) console.error('[PURCHASES_FETCH_ERROR]', error);
+
+  // Group by phone number via JavaScript, keeping only the most recent transaction
+  const customerMap = new Map();
+  
+  purchases?.forEach((p) => {
+    const phone = p.phone_number || 'Unknown';
+    
+    if (!customerMap.has(phone)) {
+      // Safely extract relational data handling Supabase array/object type returns
+      const plan = Array.isArray(p.plans) ? p.plans[0] : p.plans;
+      const location = Array.isArray(p.locations) ? p.locations[0] : p.locations;
+      
+      const durationSec = plan?.duration_seconds || 0;
+      const expiryDate = new Date(new Date(p.created_at).getTime() + durationSec * 1000);
+      const isOnline = expiryDate > new Date();
+
+      customerMap.set(phone, {
+        id: p.id,
+        phone: phone,
+        joined: p.created_at,
+        planName: plan?.name || 'Unknown Plan',
+        isOnline: isOnline,
+        currentLocation: location?.name || 'Remote',
+        expiry: expiryDate.toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })
+      });
+    }
+  });
+
+  let formattedCustomers = Array.from(customerMap.values());
+
   if (searchQuery) {
-    query = query.ilike('phone_number', `%${searchQuery}%`);
+    formattedCustomers = formattedCustomers.filter(c => c.phone.includes(searchQuery));
   }
 
-  const { data: customers, count, error } = await query.range(from, to);
-
-  if (error) console.error('[CUSTOMERS_FETCH_ERROR]', error);
-
+  // Handle in-memory pagination after grouping
+  const count = formattedCustomers.length;
   const totalPages = count ? Math.ceil(count / ITEMS_PER_PAGE) : 1;
-
-  // Format data for the operational table
-  const formattedCustomers = customers?.map((customer) => {
-    const subs = (customer.subscriptions as any[]) || [];
-    const activeSub = subs.find(s => s.status === 'active' && new Date(s.expires_at) > new Date());
-    
-    const sessions = (customer.network_sessions as any[]) || [];
-    const liveSession = sessions.find(s => s.status === 'active');
-
-    return {
-      id: customer.id,
-      phone: customer.phone_number,
-      joined: customer.created_at,
-      planName: activeSub?.plans?.name || 'No Active Plan',
-      isOnline: !!liveSession,
-      currentLocation: liveSession?.locations?.name || 'Offline',
-      expiry: activeSub ? new Date(activeSub.expires_at).toLocaleDateString('en-NG') : 'N/A'
-    };
-  }) || [];
+  const from = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedCustomers = formattedCustomers.slice(from, from + ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-6">
@@ -106,7 +118,7 @@ export default async function CustomersPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {formattedCustomers.map((customer) => (
+            {paginatedCustomers.map((customer) => (
               <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-4 font-mono font-bold text-slate-900">{customer.phone}</td>
                 <td className="px-6 py-4">
@@ -135,7 +147,7 @@ export default async function CustomersPage({
                 </td>
               </tr>
             ))}
-            {formattedCustomers.length === 0 && (
+            {paginatedCustomers.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
                   No customers found.

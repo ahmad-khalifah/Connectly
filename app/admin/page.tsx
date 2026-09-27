@@ -10,8 +10,6 @@ import { MetricTimelineChart } from './components/metric-timeline-chart';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboardOverview() {
-  
-  // Initialize Supabase with the Service Role Key to bypass Row Level Security
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -21,18 +19,15 @@ export default async function AdminDashboardOverview() {
 
   const supabase = createClient(supabaseUrl, supabaseRoleKey);
 
-  // Fetch telemetry and business state concurrently
+  // Fetch telemetry and business state concurrently. 
+  // Removed empty subscriptions/network_sessions queries and added plan duration to purchases.
   const [
     revenueData,
-    customerCounts,
-    activeSessions,
     locationsHealth,
     routersHealth,
     recentEvents
   ] = await Promise.all([
-    supabase.from('purchases').select('payment_gateway, gateway_fee_ngn, net_amount_ngn, created_at').order('created_at', { ascending: false }),
-    supabase.from('subscriptions').select('id, status'),
-    supabase.from('network_sessions').select('id', { count: 'exact' }).eq('status', 'active'),
+    supabase.from('purchases').select('payment_gateway, gateway_fee_ngn, net_amount_ngn, created_at, phone_number, plans(duration_seconds)').order('created_at', { ascending: false }),
     supabase.from('locations').select('id, name, status'),
     supabase.from('routers').select('id, identifier, status, cpu_usage_pct, wan_status'),
     supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(8)
@@ -45,14 +40,32 @@ export default async function AdminDashboardOverview() {
   const totalFees = successfulPurchases.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);
   const netRevenue = grossRevenue - totalFees;
 
+  // Derive active subscribers and sessions mathematically from the purchases table
+  const customerMap = new Map();
+  successfulPurchases.forEach(p => {
+    const phone = p.phone_number;
+    if (!phone) return;
+    
+    // Only process the most recent purchase per phone number
+    if (!customerMap.has(phone)) {
+      const plan = Array.isArray(p.plans) ? p.plans[0] : p.plans;
+      const durationSec = plan?.duration_seconds || 0;
+      const expiryDate = new Date(new Date(p.created_at).getTime() + durationSec * 1000);
+      
+      const isOnline = expiryDate > new Date();
+      customerMap.set(phone, isOnline);
+    }
+  });
+
+  // Calculate live numbers
+  const totalActiveSubs = Array.from(customerMap.values()).filter(isOnline => isOnline).length;
+  const activeUsersOnline = totalActiveSubs; // Derived equivalent until live Radius session tracking is built
+
   // Network infrastructure stats
   const totalLocations = locationsHealth.data?.length || 0;
   const offlineLocations = locationsHealth.data?.filter(l => l.status === 'offline').length || 0;
   const totalRouters = routersHealth.data?.length || 0;
   const healthyRouters = routersHealth.data?.filter(r => r.status === 'online').length || 0;
-
-  const totalActiveSubs = customerCounts.data?.filter(s => s.status === 'active').length || 0;
-  const activeUsersOnline = activeSessions.count || 0;
 
   return (
     <div className="space-y-6">
