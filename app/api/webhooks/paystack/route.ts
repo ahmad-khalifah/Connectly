@@ -43,7 +43,8 @@ export async function POST(request: Request) {
         throw new Error(`Purchase record not found in Supabase for reference: ${reference}`);
       }
 
-      if (purchase.status === 'success') {
+      // Exit early if Paystack is retrying a webhook we already completed
+      if (purchase.status === 'completed') {
         return NextResponse.json({ received: true });
       }
 
@@ -133,20 +134,19 @@ export async function POST(request: Request) {
 
       if (sessionError) throw new Error(`Session insert failed: ${sessionError.message}`);
 
-      // 4. Update Original Purchase Record to Success
+      // 4. Update Original Purchase Record to Completed
       const { error: updateError } = await supabaseAdmin
         .from('purchases')
         .update({ 
           net_amount_ngn: amountPaid,
           payment_gateway: 'paystack',
-          status: 'success'
+          status: 'completed' // Changed from 'success' to match your ENUM
         })
         .eq('reference', reference);
 
       if (updateError) {
         throw new Error(`Supabase purchase update failed: ${updateError.message}`);
       }
-    }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
