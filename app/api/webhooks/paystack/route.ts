@@ -43,7 +43,6 @@ export async function POST(request: Request) {
         throw new Error(`Purchase record not found in Supabase for reference: ${reference}`);
       }
 
-      // Exit early if Paystack is retrying a webhook we already completed
       if (purchase.status === 'success') {
         return NextResponse.json({ received: true });
       }
@@ -90,7 +89,7 @@ export async function POST(request: Request) {
         customerId = newCustomer.id;
       }
 
-      // 2. Safely Handle Subscription (Manual Check to bypass Upsert unique constraint issues)
+      // 2. Safely Handle Subscription 
       const { data: existingSub } = await supabaseAdmin
         .from('subscriptions')
         .select('id')
@@ -103,7 +102,7 @@ export async function POST(request: Request) {
         customer_id: customerId,
         plan_id: purchase.plan_id,
         status: 'active',
-        starts_at: now, // Restored missing constraint
+        starts_at: now, 
         expires_at: expiresAt,
         reference: reference
       };
@@ -121,7 +120,7 @@ export async function POST(request: Request) {
         if (insertSubError) throw new Error(`Subscription insert failed: ${insertSubError.message}`);
       }
 
-      // 3. Insert Active Network Session
+      // 3. Insert Active Network Session (Satisfying exact schema constraints)
       const { error: sessionError } = await supabaseAdmin
         .from('network_sessions')
         .insert({
@@ -129,7 +128,7 @@ export async function POST(request: Request) {
           location_id: purchase.location_id,
           status: 'active',
           mac_address: purchase.mac_address || '00:00:00:00:00:00',
-          reference: reference // Added to satisfy potential missing constraint
+          ip_address: '0.0.0.0'
         });
 
       if (sessionError) throw new Error(`Session insert failed: ${sessionError.message}`);
