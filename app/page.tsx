@@ -43,9 +43,9 @@ export default function ConnectlyCorporate() {
             <Link href="#locations" className="hover:text-[#cfa253] transition-colors">Locations</Link>
             <Link href="#company" className="hover:text-[#cfa253] transition-colors">Company</Link>
           </div>
-          <a href="/login" className="bg-[#6d1825] text-white px-4 py-2 md:px-6 md:py-2.5 rounded-sm text-sm font-bold hover:bg-[#56131d] transition-colors">
-            Get Connected
-          </a>
+          <span className="bg-[#6d1825] text-white px-4 py-2 md:px-6 md:py-2.5 rounded-sm text-sm font-bold opacity-80 cursor-not-allowed">
+            Coming Soon
+          </span>
         </div>
       </nav>
 
@@ -70,9 +70,9 @@ export default function ConnectlyCorporate() {
               Connectly provides high-speed Starlink-powered Wi-Fi hotspots and instant mobile data bundles for MTN and Airtel—all through one convenient digital platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <a href="/login" className="bg-[#cfa253] text-gray-900 px-8 py-4 rounded-sm font-bold hover:bg-[#b88c42] transition-colors flex items-center justify-center gap-2 text-center">
-                Buy Data / Wi-Fi <ArrowRight size={18} />
-              </a>
+              <span className="bg-[#cfa253] text-gray-900 px-8 py-4 rounded-sm font-bold opacity-80 cursor-not-allowed flex items-center justify-center gap-2 text-center">
+                Coming Soon
+              </span>
               <Link href="#services" className="border border-gray-400 text-white px-8 py-4 rounded-sm font-bold hover:bg-white/10 transition-colors text-center">
                 Explore Our Services
               </Link>
@@ -266,9 +266,9 @@ export default function ConnectlyCorporate() {
               Buy MTN or Airtel data instantly, or access a Connectly Wi-Fi hotspot near you.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <a href="/login" className="bg-white text-[#6d1825] px-10 py-4 rounded-sm font-bold hover:bg-gray-100 transition-colors text-center">
-                Access Portal
-              </a>
+              <span className="bg-white text-[#6d1825] px-10 py-4 rounded-sm font-bold opacity-80 cursor-not-allowed text-center">
+                Coming Soon
+              </span>
               <a href="mailto:connectly.hq@outlook.com" className="border border-white/30 text-white px-10 py-4 rounded-sm font-bold hover:bg-white/10 transition-colors text-center">
                 Request a Hotspot Location
               </a>
