@@ -287,6 +287,7 @@ export default function ConnectlyCorporate() {
             <p className="text-xs text-gray-500">
               CONNECTLY TECHNOLOGIES LTD <br/>
               RC 9843504 <br/>
+              38, Ebitu Ukiwe Street, Jabi <br/>
               Abuja, Nigeria
             </p>
           </div>
