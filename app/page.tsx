@@ -19,7 +19,7 @@ const STAGGER_CONTAINER = {
 
 const FADE_UP = {
   hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } }
+  visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
 };
 
 export default function ConnectlyCorporate() {
@@ -41,7 +41,7 @@ export default function ConnectlyCorporate() {
       <motion.nav 
         initial={{ y: -100 }}
         animate={{ y: 0 }}
-        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
         className={`fixed w-full z-50 transition-all duration-500 ${scrolled ? 'bg-white/70 backdrop-blur-2xl border-b border-gray-200/50 py-3 shadow-[0_4px_30px_rgba(0,0,0,0.03)]' : 'bg-transparent border-transparent py-6'}`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
@@ -112,7 +112,7 @@ export default function ConnectlyCorporate() {
         <motion.div 
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 1, delay: 0.4, ease: "easeOut" }}
           className="bg-white/60 backdrop-blur-3xl rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.05)] border border-white/80 flex overflow-x-auto md:grid md:grid-cols-3 divide-x divide-gray-200/40 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory"
         >
           {[
@@ -175,7 +175,7 @@ export default function ConnectlyCorporate() {
               initial={{ opacity: 0, x: 40, filter: 'blur(10px)' }}
               whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
               viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 1, ease: "easeOut" }}
               className="relative h-[500px] md:h-[650px] w-full rounded-[2rem] overflow-hidden shadow-[0_20px_80px_rgba(0,0,0,0.08)] group"
             >
               <Image 
