@@ -31,6 +31,21 @@ export function appUrl(): string {
   return 'http://localhost:3000';
 }
 
+/**
+ * URL Korapay posts payment notifications to. Preview deployments sit behind
+ * Vercel's login, so on previews only the Protection Bypass for Automation
+ * token (VERCEL_AUTOMATION_BYPASS_SECRET, set by Vercel when enabled) is
+ * added as a query parameter. Production never carries it.
+ */
+export function korapayWebhookUrl(): string {
+  const url = `${appUrl()}/api/webhooks/kora`;
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (appEnv() === 'preview' && bypass) {
+    return `${url}?x-vercel-protection-bypass=${encodeURIComponent(bypass)}`;
+  }
+  return url;
+}
+
 export function koraKeyMode(key = process.env.KORA_SECRET_KEY): 'live' | 'test' | 'missing' | 'unknown' {
   if (!key) return 'missing';
   if (key.startsWith('sk_live_')) return 'live';
