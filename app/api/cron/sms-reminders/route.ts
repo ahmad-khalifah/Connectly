@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendSMS } from '@/lib/sms';
+import { sendTermiiSMS } from '@/lib/sms';
 
 export async function GET(request: Request) {
   // Verify request is from Vercel Cron
