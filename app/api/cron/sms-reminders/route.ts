@@ -1,11 +1,14 @@
+import { secretMatches } from '@/lib/auth/shared-secret';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendTermiiSMS } from '@/lib/sms';
 
 export async function GET(request: Request) {
   // Verify request is from Vercel Cron
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  // Fails closed: if CRON_SECRET is unset, nobody can trigger this job.
+  // (Before, the header "Bearer undefined" passed when the secret was missing.)
+  const secret = process.env.CRON_SECRET;
+  if (!secret || !secretMatches(request.headers.get('authorization'), `Bearer ${secret}`)) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -21,6 +24,7 @@ export async function GET(request: Request) {
   const { data: purchases } = await supabaseAdmin
     .from('purchases')
     .select('id, phone_number, created_at, plans(name, duration_seconds)')
+    .eq('status', 'paid') // never text people who did not complete a payment
     .gte('created_at', thirtyDaysAgo.toISOString());
 
   if (!purchases) return NextResponse.json({ success: true, processed: 0 });
@@ -38,14 +42,14 @@ export async function GET(request: Request) {
 
     // 1. "About to Exhaust" Reminder (e.g., exactly between 30 and 90 minutes remaining)
     if (timeRemainingMinutes > 0 && timeRemainingMinutes <= 60) {
-      const msg = `Connectly Alert: Your ${plan.name} will expire in less than an hour. Top up now at connectly.net/login to stay connected.`;
+      const msg = `Connectly Alert: Your ${plan.name} will expire in less than an hour. Top up now at getconnectly.net to stay connected.`;
       await sendTermiiSMS(p.phone_number, msg);
       messagesSent++;
     }
 
     // 2. "Exhausted" Reminder (e.g., expired within the last 60 minutes)
     if (timeRemainingMinutes <= 0 && timeRemainingMinutes > -60) {
-      const msg = `Connectly Alert: Your ${plan.name} has expired. Please visit connectly.net/login to purchase a new pass or data bundle.`;
+      const msg = `Connectly Alert: Your ${plan.name} has expired. Please visit getconnectly.net to purchase a new pass or data bundle.`;
       await sendTermiiSMS(p.phone_number, msg);
       messagesSent++;
     }
