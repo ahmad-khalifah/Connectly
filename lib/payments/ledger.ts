@@ -63,6 +63,51 @@ export async function reconcilePurchase(reference: string): Promise<{ outcome: R
   return { outcome: 'still_pending', purchaseId: purchase.id };
 }
 
+export type SweepSummary = { checked: number; confirmed: number; failed: number; errors: number };
+
+/**
+ * Re-checks recent pending Korapay purchases with Korapay's verify API.
+ * Safety net for a webhook that never arrived (network fault, or Vercel's
+ * login wall on preview URLs) when the customer also closed the page
+ * before it re-checked. Bounded: newest `limit` purchases from the last
+ * `maxAgeHours`, in parallel. Each check goes through reconcilePurchase,
+ * so it is idempotent and can never pay twice. Never throws.
+ */
+export async function reconcileRecentPending({ limit = 10, maxAgeHours = 24 } = {}): Promise<SweepSummary> {
+  const summary: SweepSummary = { checked: 0, confirmed: 0, failed: 0, errors: 0 };
+  try {
+    const since = new Date(Date.now() - maxAgeHours * 3_600_000).toISOString();
+    const { data, error } = await db
+      .from('purchases')
+      .select('reference')
+      .eq('status', 'pending')
+      .eq('payment_gateway', 'korapay')
+      .like('reference', 'CONN_%')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(error.message);
+
+    const refs = ((data ?? []) as { reference: string }[]).map((r) => r.reference);
+    const results = await Promise.allSettled(refs.map((ref) => reconcilePurchase(ref)));
+    summary.checked = refs.length;
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        summary.errors += 1;
+        console.error('[RECONCILE_SWEEP_ERROR]', refs[i], r.reason);
+      } else if (r.value.outcome === 'paid') {
+        summary.confirmed += 1;
+      } else if (r.value.outcome === 'failed') {
+        summary.failed += 1;
+      }
+    });
+  } catch (err) {
+    summary.errors += 1;
+    console.error('[RECONCILE_SWEEP_ERROR]', err);
+  }
+  return summary;
+}
+
 /**
  * Sends the payment confirmation SMS once per purchase. The notifications
  * row (unique per purchase + template) is claimed first, so a duplicate
