@@ -5,8 +5,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-export default async function LocationDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function LocationDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
 
   const [locationRes, backhaulRes, routersRes, apRes, sessionsRes] = await Promise.all([
     db.from('locations').select('*, institutions(name)').eq('id', id).single(),
