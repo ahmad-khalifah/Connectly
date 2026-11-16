@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Connectly Technologies | WiFi Hotspot Management',
   description: 'Connectly builds and manages reliable internet connectivity infrastructure and automated captive portals for places that need better access.',
-  keywords: ['WiFi management', 'captive portal', 'Abuja', 'Nigeria', 'hotspot billing', 'internet connectivity', 'Paystack hotspot'],
+  keywords: ['WiFi management', 'captive portal', 'Abuja', 'Nigeria', 'hotspot billing', 'internet connectivity', 'hotspot billing'],
   openGraph: {
     title: 'Connectly Technologies',
     description: 'Reliable internet connectivity infrastructure and automated hotspot management.',
@@ -44,6 +44,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      {/* Head is automatically managed by Next.js */}
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

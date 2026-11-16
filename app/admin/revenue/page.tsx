@@ -16,7 +16,7 @@ export default async function RevenueAnalyticsPage() {
   const { data: revenueData, error } = await supabase
     .from('purchases')
     .select('gateway_fee_ngn, net_amount_ngn, payment_gateway, created_at, plans(name), locations(name)')
-    .eq('payment_gateway', 'paystack');
+    .eq('payment_gateway', 'kora payment gateway');
 
   if (error) console.error('[REVENUE_FETCH_ERROR]', error);
 

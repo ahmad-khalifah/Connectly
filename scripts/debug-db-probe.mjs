@@ -17,9 +17,9 @@ console.log('LOC', JSON.stringify({ err: loc.error, data: loc.data }));
 const plans = await db.from('plans').select('id,name,is_active,price_kobo').limit(5);
 console.log('PLANS', JSON.stringify({ err: plans.error, data: plans.data }));
 
-const cols = await db.from('purchases').select('paystack_reference').limit(1);
+const cols = await db.from('purchases').select('kora_reference').limit(1);
 console.log(
-  'PAYSTACK_REF_COL',
+  'KORA_REF_COL',
   JSON.stringify({
     err: cols.error && {
       message: cols.error.message,

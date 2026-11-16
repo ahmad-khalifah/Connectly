@@ -21,12 +21,12 @@ export default function CheckoutForm({ plan, phoneNumber, locationSlug }: any) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
-      if (typeof window === 'undefined' || !(window as any).PaystackPop) {
-        throw new Error('Paystack script is still loading. Please try again.');
+      if (typeof window === 'undefined' || !(window as any).KoraPop) {
+        throw new Error('Kora script is still loading. Please try again.');
       }
 
-      const handler = (window as any).PaystackPop.setup({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '',
+      const handler = (window as any).KoraPop.setup({
+        key: process.env.NEXT_PUBLIC_KORA_PUBLIC_KEY || '',
         email: `${phoneNumber}@campusnet.local`,
         amount: data.amount_kobo || (plan?.price || 500) * 100,
         ref: data.reference,
@@ -48,13 +48,13 @@ export default function CheckoutForm({ plan, phoneNumber, locationSlug }: any) {
 
   return (
     <>
-      <Script src="https://js.paystack.co/v1/inline.js" strategy="afterInteractive" />
+      <Script src="https://js.kora.co/v1/inline.js" strategy="afterInteractive" />
       <button 
         onClick={handlePayment} 
         disabled={loading}
         className="w-full rounded-lg bg-blue-600 py-3 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
       >
-        {loading ? 'Processing...' : 'Pay with Paystack'}
+        {loading ? 'Processing...' : 'Pay with Kora'}
       </button>
     </>
   );

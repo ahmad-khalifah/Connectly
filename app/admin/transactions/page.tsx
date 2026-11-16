@@ -53,7 +53,7 @@ export default async function TransactionsPage({
 
   // Status is now derived from the presence of the payment_gateway string
   const renderStatus = (gateway: string) => {
-    if (gateway === 'paystack') {
+    if (gateway === 'kora payment gateway') {
       return <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-emerald-200"><CheckCircle2 className="h-3 w-3" /> Success</span>;
     }
     return <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[11px] font-bold uppercase border border-amber-200"><Clock className="h-3 w-3" /> Pending</span>;

@@ -1,242 +1,130 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Image from 'next/image';
-import Script from 'next/script';
-import { supabaseBrowser } from '../../lib/db/browser';
-import { CheckCircle2, Loader2, Wifi, Phone } from 'lucide-react';
+import { useState } from 'react';
+// Ensure this path matches where you created the server action
+import { initializeKoraCheckout } from '../actions/payment'; 
 
-export default function PortalClient({ 
-  plans, 
-  location, 
-  mac, 
-  ip, 
-  routerId 
-}: { 
-  plans: any[], 
-  location: any,
-  mac: string,
-  ip: string,
-  routerId: string
-}) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
-  const [selectedPlan, setSelectedPlan] = useState<any>(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [reference, setReference] = useState('');
+interface Plan {
+  id: string;
+  name: string;
+  price_kobo: number;
+  download_limit_kbps: number | null;
+}
 
-  const BRAND = { burgundy: '#6d1825', sand: '#cfa253' };
+interface Location {
+  id: string;
+  name: string;
+  slug: string;
+}
 
-  // Poll Supabase for webhook updates
-  useEffect(() => {
-    if (!reference) return;
+interface PortalClientProps {
+  mac: string;
+  ip: string;
+  routerId: string;
+  location: Location;
+  plans: Plan[];
+}
 
-    const interval = setInterval(async () => {
-      const { data, error } = await supabaseBrowser
-        .from('purchases')
-        .select('status')
-        .eq('reference', reference)
-        .single();
+export default function PortalClient({ mac, ip, routerId, location, plans }: PortalClientProps) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>(plans[0]?.id || '');
+  const [phone, setPhone] = useState('');
 
-      if (error) {
-        console.error('Polling error:', error.message);
-        return;
-      }
+  const selectedPlan = plans.find(p => p.id === selectedPlanId);
+  const priceNaira = selectedPlan ? selectedPlan.price_kobo / 100 : 0;
 
-      // Route both success and failed fallbacks to the manual login UI
-      if (data?.status === 'success' || data?.status === 'failed') {
-        setStep(5);
-        clearInterval(interval);
-      }
-    }, 3000); 
+  const triggerKoraPayment = async () => {
+    // 1. We removed the window.Korapay check here entirely
+    
+    if (!selectedPlan || !phone) {
+      alert("Please enter your phone number and select a plan.");
+      return;
+    }
 
-    return () => clearInterval(interval);
-  }, [reference]);
-
-  const handleInitiate = async () => {
-    setStep(3);
-
+    setIsProcessing(true);
+    
     try {
-      const res = await fetch('/api/purchase/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          planId: selectedPlan.id, 
-          phoneNumber, 
-          location_id: location.id,
-          macAddress: mac,
-          routerId: routerId
-        })
+      // 2. We now call the secure backend action
+      const checkoutUrl = await initializeKoraCheckout({
+        amount: priceNaira,
+        mac,
+        ip,
+        routerId,
+        planId: selectedPlan.id,
+        phone
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to initiate purchase');
 
-      setReference(data.reference);
-
-      if (typeof window === 'undefined' || !(window as any).PaystackPop) {
-        throw new Error('Paystack script is still loading. Please try again.');
+      // 3. Redirect the user to the Kora-hosted payment page
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+      } else {
+        throw new Error("No checkout URL returned from Kora");
       }
 
-      const handler = (window as any).PaystackPop.setup({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '',
-        email: data.email || `${phoneNumber}@connectly.app`,
-        amount: data.amount_kobo || selectedPlan.price_kobo,
-        ref: data.reference,
-        currency: 'NGN',
-        channels: ['bank_transfer', 'card'],
-        callback: (response: any) => {
-          console.log('Paystack success response:', response);
-          // Immediately route to the manual login screen on successful payment
-          if (response.status === 'success' || response.message === 'Approved') {
-            setStep(5);
-          }
-        },
-        onClose: () => {
-          setStep((prevStep) => (prevStep < 4 ? 2 : prevStep));
-        },
-      });
-
-      handler.openIframe();
-      
     } catch (error) {
-      console.error(error);
-      setStep(2);
+      console.error("Checkout Error:", error);
+      alert("Unable to start payment. Please check your console for details.");
+      setIsProcessing(false);
     }
   };
 
-  if (step === 4) {
-    return (
-      <div className="max-w-md w-full mx-auto text-center space-y-6 p-8 bg-white rounded-xl shadow-sm mt-10 border-t-4" style={{ borderColor: BRAND.burgundy }}>
-        <CheckCircle2 className="h-20 w-20 mx-auto text-green-500" />
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900">Connected!</h2>
-          <p className="text-gray-500 mt-2">Your device has been authorized on the network.</p>
-        </div>
-        <button onClick={() => window.location.reload()} className="text-sm font-medium hover:underline" style={{ color: BRAND.burgundy }}>
-          Connect another device
-        </button>
-      </div>
-    );
-  }
-
-  if (step === 5) {
-    return (
-      <div className="max-w-md w-full mx-auto text-center space-y-6 p-8 bg-white rounded-xl shadow-sm mt-10 border-t-4" style={{ borderColor: BRAND.sand }}>
-        <Wifi className="h-16 w-16 mx-auto text-gray-400" />
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Payment Verified</h2>
-          <p className="text-gray-500 mt-2 text-sm">
-            We couldn't auto-connect this device, but your plan is active. Please log in manually.
-          </p>
-        </div>
-        
-        <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">Your Access Code</p>
-          <p className="text-3xl font-mono font-bold tracking-wider" style={{ color: BRAND.burgundy }}>
-            {phoneNumber}
-          </p>
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Connectly Wi-Fi</h1>
+          <p className="text-gray-500 text-sm mt-1">{location.name}</p>
         </div>
 
-        <div className="space-y-3">
-          <a href={`http://${ip}/login`} target="_blank" rel="noreferrer" 
-             className="block w-full py-3 rounded-lg text-white font-bold transition-opacity"
-             style={{ backgroundColor: BRAND.burgundy }}>
-            Go to Login Page
-          </a>
-          <button className="text-sm font-medium text-gray-500 hover:text-gray-900">
-            Contact Support
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+            <input 
+              type="tel" 
+              placeholder="080XXXXXXXX"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#6d1825]"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select a Plan</label>
+            <div className="space-y-3">
+              {plans.map((plan) => (
+                <label 
+                  key={plan.id} 
+                  className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-colors ${
+                    selectedPlanId === plan.id ? 'border-[#6d1825] bg-[#6d1825]/5' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="radio" 
+                      name="plan"
+                      value={plan.id}
+                      checked={selectedPlanId === plan.id}
+                      onChange={(e) => setSelectedPlanId(e.target.value)}
+                      className="text-[#6d1825] focus:ring-[#6d1825]"
+                    />
+                    <span className="font-medium text-gray-900">{plan.name}</span>
+                  </div>
+                  <span className="font-bold text-gray-900">₦{plan.price_kobo / 100}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={triggerKoraPayment}
+            disabled={isProcessing || !phone}
+            className="w-full bg-[#6d1825] text-white py-3.5 rounded-lg font-bold hover:bg-[#5a141e] disabled:opacity-50 transition-colors mt-4"
+          >
+            {isProcessing ? 'Connecting to secure gateway...' : `Pay ₦${priceNaira}`}
           </button>
         </div>
       </div>
-    );
-  }
-
-  return (
-    <div className="max-w-md w-full mx-auto mt-10 space-y-6">
-      <Script src="https://js.paystack.co/v1/inline.js" strategy="afterInteractive" />
-      
-      <div className="flex justify-center mb-8">
-        <Image src="/connectly-logo-horizontal.svg" alt="Connectly Logo" width={240} height={60} priority />
-      </div>
-
-      <div className="space-y-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all">
-          <div className="p-4 flex items-center justify-between bg-gray-50 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full text-white" style={{ backgroundColor: step === 1 ? BRAND.burgundy : '#d1d5db' }}>
-                <Wifi size={18} />
-              </div>
-              <h2 className="font-semibold text-gray-900">1. Select Data Plan</h2>
-            </div>
-            {step > 1 && (
-              <button onClick={() => setStep(1)} className="text-sm font-medium hover:underline" style={{ color: BRAND.burgundy }}>Edit</button>
-            )}
-          </div>
-          
-          {step === 1 ? (
-            <div className="p-4 space-y-3">
-              {plans.map((plan: any) => (
-                <button 
-                  key={plan.id} 
-                  onClick={() => { setSelectedPlan(plan); setStep(2); }} 
-                  className="w-full p-4 border rounded-lg text-left transition-all hover:border-gray-400 focus:ring-2 flex justify-between items-center group"
-                  style={{ outlineColor: BRAND.sand }}
-                >
-                  <span className="font-bold text-gray-800">{plan.name}</span>
-                  <span className="font-bold text-lg" style={{ color: BRAND.burgundy }}>₦{plan.price_kobo / 100}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="p-4 flex justify-between items-center bg-white text-gray-600">
-              <span>{selectedPlan?.name}</span>
-              <span className="font-semibold">₦{selectedPlan?.price_kobo / 100}</span>
-            </div>
-          )}
-        </div>
-
-        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all ${step < 2 ? 'opacity-50 pointer-events-none' : ''}`}>
-          <div className="p-4 flex items-center justify-between bg-gray-50 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full text-white" style={{ backgroundColor: step === 2 ? BRAND.burgundy : '#d1d5db' }}>
-                <Phone size={18} />
-              </div>
-              <h2 className="font-semibold text-gray-900">2. Device Login Details</h2>
-            </div>
-          </div>
-          
-          {step === 2 && (
-            <form onSubmit={(e) => e.preventDefault()} className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Enter Phone Number (This will be your password)</label>
-                <input 
-                  type="tel" 
-                  value={phoneNumber} 
-                  onChange={(e) => setPhoneNumber(e.target.value)} 
-                  placeholder="080..." 
-                  className="w-full p-4 border border-gray-300 rounded-lg outline-none text-lg tracking-wide focus:ring-2 focus:ring-[#cfa253]" 
-                />
-              </div>
-              <button 
-                type="button"
-                onClick={handleInitiate} 
-                disabled={!phoneNumber || phoneNumber.length < 10} 
-                className="w-full text-white p-4 rounded-lg font-bold text-lg transition-opacity disabled:opacity-50"
-                style={{ backgroundColor: BRAND.burgundy }}
-              >
-                Pay ₦{selectedPlan?.price_kobo / 100}
-              </button>
-            </form>
-          )}
-        </div>
-
-        {step === 3 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center space-y-4 border-t-4" style={{ borderColor: BRAND.sand }}>
-             <Loader2 className="h-10 w-10 animate-spin mx-auto" style={{ color: BRAND.burgundy }} />
-             <h3 className="font-semibold text-gray-900">Awaiting Payment...</h3>
-             <p className="text-sm text-gray-500">Complete the transaction in the Paystack popup.</p>
-          </div>
-        )}
-      </div>
-    </div>
+    </main>
   );
 }

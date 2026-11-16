@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const { data: payment } = await db
       .from('payments')
       .select(`status, purchases ( status, expires_at, claim_token, plans ( name ) )`)
-      .eq('paystack_reference', ref)
+      .eq('kora_reference', ref)
       .single();
 
     if (!payment) return NextResponse.json({ status: 'pending' });

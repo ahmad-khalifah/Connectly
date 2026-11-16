@@ -1,82 +1,54 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Script from 'next/script';
+import { useRouter } from 'next/navigation';
 
-interface CheckoutFormProps {
-  plan?: { id: string; name: string; priceNaira: number };
-  phoneNumber?: string;
-  locationSlug?: string;
-}
-
-export default function CheckoutForm({ plan, phoneNumber, locationSlug }: CheckoutFormProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+export default function CheckoutForm({ planId, priceNaira, phone }: { planId: string, priceNaira: number, phone: string }) {
+  const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
 
-  const handlePayment = async () => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const res = await fetch('/api/purchases/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: plan?.id,
-          phoneNumber,
-          location_id: locationSlug, 
-          macAddress: '00:00:00:00:00:00' 
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || 'Failed to initialize payment');
+  const triggerKoraPayment = () => {
+    setIsProcessing(true);
+    
+    // @ts-ignore - Kora is injected globally via the Script tag
+    window.Korapay.initialize({
+      key: process.env.NEXT_PUBLIC_KORA_PUBLIC_KEY,
+      amount: priceNaira, 
+      currency: "NGN",
+      reference: `CONN_${Date.now()}`,
+      customer: {
+        name: "Connectly User",
+        email: `${planId}@connectly.net`, // Passing planId through email metadata
+        phone: phone
+      },
+      onClose: function () {
+        console.log('Payment modal closed');
+        setIsProcessing(false);
+      },
+      onSuccess: function (data: any) {
+        console.log('Payment successful', data);
+        // The webhook handles the DB insert. Redirect the user to a success page.
+        router.push('/success'); 
       }
-
-      const data = await res.json();
-
-      if (typeof window === 'undefined' || !(window as any).PaystackPop) {
-        throw new Error('Paystack script is still loading. Please try again.');
-      }
-
-      const handler = (window as any).PaystackPop.setup({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '',
-        email: data.email,
-        amount: data.amount_kobo,
-        ref: data.reference,
-        currency: 'NGN',
-        callback: () => {
-          router.push(`/connect?loc=${locationSlug || ''}&status=success`);
-        },
-        onClose: () => {
-          setLoading(false);
-        },
-      });
-
-      handler.openIframe();
-
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
-    }
+    });
   };
 
   return (
-    <div className="space-y-4">
-      <Script src="https://js.paystack.co/v1/inline.js" strategy="afterInteractive" />
-      
-      {error && <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200">{error}</div>}
-      
-      <button
-        onClick={handlePayment}
-        disabled={loading || !plan}
-        className="w-full bg-[#6d1825] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#5a141e] transition-colors disabled:opacity-50"
+    <>
+      {/* Next.js optimized script loading */}
+      <Script 
+        src="https://korapay.com/assets/js/KorapayPayInline.js" 
+        strategy="lazyOnload"
+      />
+
+      <button 
+        onClick={triggerKoraPayment}
+        disabled={isProcessing}
+        className="w-full bg-[#6d1825] text-white py-3 rounded-lg font-bold hover:bg-[#5a141e] disabled:opacity-50 transition-colors"
       >
-        {loading ? 'Initializing...' : `Pay ₦${plan?.priceNaira || 0}`}
+        {isProcessing ? 'Initializing...' : `Pay ₦${priceNaira}`}
       </button>
-    </div>
+    </>
   );
 }

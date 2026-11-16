@@ -1,6 +1,6 @@
-export async function verifyPaystackTransaction(reference: string) {
-  const secretKey = process.env.PAYSTACK_SECRET_KEY;
-  const baseUrl = 'https://api.paystack.co';
+export async function verifyKoraTransaction(reference: string) {
+  const secretKey = process.env.KORA_SECRET_KEY;
+  const baseUrl = 'https://api.kora.co';
 
   const response = await fetch(`${baseUrl}/transaction/verify/${reference}`, {
     method: 'GET',
@@ -12,7 +12,7 @@ export async function verifyPaystackTransaction(reference: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Paystack verification failed: ${response.statusText}`);
+    throw new Error(`Kora transaction verification failed: ${response.statusText}`);
   }
   
   const result = await response.json();

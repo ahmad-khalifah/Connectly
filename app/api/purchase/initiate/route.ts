@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     const priceInNaira = plan.price_kobo / 100;
     const reference = `TRX_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const paystackEmail = `${phoneNumber}@connectly.app`;
+    const koraEmail = `${phoneNumber}@connectly.app`;
 
     // Strip unconstrained columns and match exact Supabase schema
     const { data: insertedRow, error: insertError } = await supabaseAdmin
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       reference,
       amount_kobo: plan.price_kobo,
-      email: paystackEmail
+      email: koraEmail
     });
   } catch (error: any) {
     console.error('[INITIATE_ERROR]', error);

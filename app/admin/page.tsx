@@ -34,7 +34,7 @@ export default async function AdminDashboardOverview() {
   ]);
 
   // Financial calculations
-  const successfulPurchases = revenueData.data?.filter(p => p.payment_gateway === 'paystack') || [];
+  const successfulPurchases = revenueData.data?.filter(p => p.payment_gateway === 'kora payment gateway') || [];
   
   const grossRevenue = successfulPurchases.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
   const totalFees = successfulPurchases.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);

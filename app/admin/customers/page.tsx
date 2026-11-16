@@ -34,7 +34,7 @@ export default async function CustomersPage({
       plans(name, duration_seconds),
       locations(name)
     `)
-    .eq('payment_gateway', 'paystack')
+    .eq('payment_gateway', 'kora')
     .order('created_at', { ascending: false });
 
   if (error) console.error('[PURCHASES_FETCH_ERROR]', error);
