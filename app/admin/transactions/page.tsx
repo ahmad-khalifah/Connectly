@@ -2,6 +2,7 @@ import { ArrowLeftRight, Search, CheckCircle2, XCircle, Clock } from 'lucide-rea
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import ReconcileButton from './reconcile-button';
+import { reconcileRecentPending } from '@/lib/payments/ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,6 +64,10 @@ export default async function TransactionsPage({
 
   const supabase = db;
 
+  // Payments Korapay confirmed but whose notification never reached us are
+  // settled here, before the list is read, so the page shows the truth.
+  const sweep = await reconcileRecentPending();
+
   let query = supabase
     .from('purchases')
     .select(
@@ -111,6 +116,13 @@ export default async function TransactionsPage({
           </button>
         </form>
       </div>
+
+      {(sweep.confirmed > 0 || sweep.failed > 0) && (
+        <div className="p-4 rounded-lg border border-emerald-200 bg-emerald-50 text-sm text-emerald-800">
+          Re-checked {sweep.checked} pending payment{sweep.checked === 1 ? '' : 's'} with Korapay:{' '}
+          {sweep.confirmed} confirmed paid{sweep.failed > 0 ? `, ${sweep.failed} failed` : ''}.
+        </div>
+      )}
 
       {error && (
         <div className="p-4 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">

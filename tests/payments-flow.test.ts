@@ -220,3 +220,54 @@ describe('initializeKoraCheckout', () => {
     expect(fake.rpcCalls[0]).toMatchObject({ fn: 'mark_payment_failed' });
   });
 });
+
+// ---------------------------------------------------------------- missed-webhook sweep
+describe('reconcileRecentPending (admin pages settle missed webhooks)', () => {
+  const R_OK = 'CONN_aaaaaaaa-0000-4000-8000-000000000001';
+  const R_FAIL = 'CONN_aaaaaaaa-0000-4000-8000-000000000002';
+  const R_WAIT = 'CONN_aaaaaaaa-0000-4000-8000-000000000003';
+
+  const handler: Handler = (op) => {
+    if (op.table !== 'purchases' || op.action !== 'select') return { data: null, error: null };
+    const ref = op.filters.find(([c]) => c === 'reference')?.[1] as string | undefined;
+    if (ref) return { data: { id: `p-${ref.slice(-1)}`, status: 'pending' }, error: null };
+    return { data: [{ reference: R_OK }, { reference: R_FAIL }, { reference: R_WAIT }], error: null };
+  };
+
+  it('asks only for recent pending Korapay checkouts, newest 10', async () => {
+    fake = createFakeDb(() => ({ data: [], error: null }));
+    const { reconcileRecentPending } = await import('@/lib/payments/ledger');
+    expect(await reconcileRecentPending()).toEqual({ checked: 0, confirmed: 0, failed: 0, errors: 0 });
+    const f = Object.fromEntries(fake.ops[0].filters);
+    expect(f).toMatchObject({ status: 'pending', payment_gateway: 'korapay', 'reference~': 'CONN_%', limit: 10 });
+    const since = Date.parse(f['created_at>='] as string);
+    expect(Math.abs(Date.now() - 24 * 3_600_000 - since)).toBeLessThan(5_000);
+    expect(verifyCharge).not.toHaveBeenCalled();
+  });
+
+  it('confirms paid, marks failed, leaves processing pending, through the same idempotent path', async () => {
+    fake = createFakeDb(handler, (fn) => ({ data: { outcome: fn === 'confirm_payment' ? 'paid' : 'failed' }, error: null }));
+    verifyCharge.mockImplementation(async (ref: string) => ({
+      reference: ref,
+      status: ref === R_OK ? 'success' : ref === R_FAIL ? 'failed' : 'processing',
+      amountPaidKobo: ref === R_OK ? 30000 : 0, feeKobo: 419, currency: 'NGN', providerReference: 'KPY',
+    }));
+    const { reconcileRecentPending } = await import('@/lib/payments/ledger');
+    expect(await reconcileRecentPending()).toEqual({ checked: 3, confirmed: 1, failed: 1, errors: 0 });
+    expect(fake.rpcCalls.map((c) => c.fn).sort()).toEqual(['confirm_payment', 'mark_payment_failed']);
+  });
+
+  it('never throws: a Korapay outage is counted, the page still renders', async () => {
+    fake = createFakeDb(handler);
+    verifyCharge.mockRejectedValue(new Error('Korapay unreachable'));
+    const { reconcileRecentPending } = await import('@/lib/payments/ledger');
+    expect(await reconcileRecentPending()).toEqual({ checked: 3, confirmed: 0, failed: 0, errors: 3 });
+    expect(fake.rpcCalls).toEqual([]);
+  });
+
+  it('never throws when the database query itself fails', async () => {
+    fake = createFakeDb(() => ({ data: null, error: { message: 'db down' } }));
+    const { reconcileRecentPending } = await import('@/lib/payments/ledger');
+    expect(await reconcileRecentPending()).toEqual({ checked: 0, confirmed: 0, failed: 0, errors: 1 });
+  });
+});

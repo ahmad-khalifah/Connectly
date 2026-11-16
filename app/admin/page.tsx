@@ -1,5 +1,6 @@
 import React from 'react';
 import { db } from '@/lib/db/client';
+import { reconcileRecentPending } from '@/lib/payments/ledger';
 import { 
   DollarSign, Users, Activity, Wifi, AlertTriangle, 
   ArrowUpRight, ArrowDownRight, Radio, Server, Clock 
@@ -18,6 +19,10 @@ export default async function AdminDashboardOverview() {
   }
 
   const supabase = db;
+
+  // Settle recent payments whose Korapay notification never arrived, so the
+  // revenue and subscriber figures below include them.
+  await reconcileRecentPending();
 
   // Fetch telemetry and business state concurrently. 
   // Removed empty subscriptions/network_sessions queries and added plan duration to purchases.
