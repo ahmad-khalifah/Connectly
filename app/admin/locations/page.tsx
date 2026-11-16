@@ -1,3 +1,4 @@
+import { appUrl } from '@/lib/env';
 import { db } from '@/lib/db/client';
 import { MapPin, Router, Wifi, TrendingUp, Users, Plus, QrCode, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
@@ -38,7 +39,7 @@ export default async function LocationsDirectoryPage() {
     };
   }) || [];
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3001');
+  const portalBase = appUrl();
 
   return (
     <div className="space-y-6">
@@ -59,7 +60,7 @@ export default async function LocationsDirectoryPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {formattedLocations.map((location) => {
-          const connectUrl = `${appUrl}/connect?loc=${location.slug}`;
+          const connectUrl = `${portalBase}/connect?loc=${location.slug}`;
 
           return (
             <div key={location.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs relative flex flex-col">

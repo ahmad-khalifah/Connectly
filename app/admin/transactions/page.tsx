@@ -1,6 +1,6 @@
 import { ArrowLeftRight, Search, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import Link from 'next/link';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 import ReconcileButton from './reconcile-button';
 
 export const dynamic = 'force-dynamic';
@@ -61,7 +61,7 @@ export default async function TransactionsPage({
     return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+  const supabase = db;
 
   let query = supabase
     .from('purchases')

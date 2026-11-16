@@ -1,5 +1,5 @@
 import React from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 import { 
   DollarSign, Users, Activity, Wifi, AlertTriangle, 
   ArrowUpRight, ArrowDownRight, Radio, Server, Clock 
@@ -17,7 +17,7 @@ export default async function AdminDashboardOverview() {
     return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+  const supabase = db;
 
   // Fetch telemetry and business state concurrently. 
   // Removed empty subscriptions/network_sessions queries and added plan duration to purchases.

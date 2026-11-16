@@ -1,6 +1,6 @@
 import { Users, Search, CreditCard, MoreVertical } from 'lucide-react';
 import Link from 'next/link';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,7 @@ export default async function CustomersPage({
     return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+  const supabase = db;
 
   // Fetch successful purchases to derive customer states
   const { data: purchases, error } = await supabase

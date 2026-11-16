@@ -1,6 +1,6 @@
 import { secretMatches } from '@/lib/auth/shared-secret';
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 import { sendTermiiSMS } from '@/lib/sms';
 
 export async function GET(request: Request) {
@@ -12,10 +12,7 @@ export async function GET(request: Request) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabaseAdmin = db;
 
   // Fetch recent purchases (e.g., from the last 30 days to optimize query)
   const thirtyDaysAgo = new Date();

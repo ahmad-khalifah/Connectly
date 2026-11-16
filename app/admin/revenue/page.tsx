@@ -1,5 +1,5 @@
 import { TrendingUp, DollarSign, PieChart, Activity } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,7 @@ export default async function RevenueAnalyticsPage() {
     return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+  const supabase = db;
 
   const { data: revenueData, error } = await supabase
     .from('purchases')

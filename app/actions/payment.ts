@@ -3,6 +3,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '@/lib/db/client';
 import { normaliseNigerianMobile } from '@/lib/phone';
+import { appUrl } from '@/lib/env';
 import { initializeCharge, KorapayConfigError } from '@/lib/payments/korapay';
 
 // Public Server Function: anyone can call it with any arguments, so it
@@ -77,7 +78,7 @@ async function startCheckout(payload: CheckoutInput): Promise<{ checkoutUrl: str
   }
 
   const reference = `CONN_${randomUUID()}`;
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const baseUrl = appUrl();
 
   // 1. Record the intent first, so every payment Korapay reports has a row.
   const { error: insertError } = await db.from('purchases').insert({
@@ -109,8 +110,8 @@ async function startCheckout(payload: CheckoutInput): Promise<{ checkoutUrl: str
         mac_address: mac ?? '',
         ip_address: ip ?? '',
       },
-      redirectUrl: `${appUrl}/success?reference=${encodeURIComponent(reference)}`,
-      notificationUrl: `${appUrl}/api/webhooks/kora`,
+      redirectUrl: `${baseUrl}/success?reference=${encodeURIComponent(reference)}`,
+      notificationUrl: `${baseUrl}/api/webhooks/kora`,
     });
     return { checkoutUrl, reference };
   } catch (error) {
