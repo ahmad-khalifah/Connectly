@@ -1,52 +1,40 @@
 // Server-only module. Do NOT add 'use server': that would turn this into a
 // public Server Function anyone could call to send SMS on our account.
 
-export async function sendTermiiSMS(phone: string, message: string) {
+import { normaliseNigerianMobile } from '@/lib/phone';
+
+export type SmsResult = { ok: true; messageId: string | null } | { ok: false; error: string };
+
+/**
+ * Sends one SMS through Termii.
+ * TERMII_CHANNEL defaults to "dnd": transactional messages on the generic
+ * route are not delivered to numbers on Do-Not-Disturb, which is most
+ * Nigerian lines. The dnd route needs an approved Sender ID.
+ */
+export async function sendTermiiSMS(phone: string, message: string): Promise<SmsResult> {
   const apiKey = process.env.TERMII_API_KEY;
-  const senderId = process.env.TERMII_SENDER_ID || "N-Alert";
+  const senderId = process.env.TERMII_SENDER_ID;
+  const baseUrl = (process.env.TERMII_BASE_URL || 'https://api.ng.termii.com').replace(/\/+$/, '');
+  const channel = process.env.TERMII_CHANNEL || 'dnd';
 
-  if (!apiKey) {
-    console.error("Missing Termii API Key");
-    return false;
-  }
+  if (!apiKey || !senderId) return { ok: false, error: 'Termii is not configured (TERMII_API_KEY / TERMII_SENDER_ID)' };
 
-  // Format phone number to international standard (remove leading 0, add 234 for Nigeria)
-  let formattedPhone = phone.trim();
-  if (formattedPhone.startsWith('0')) {
-    formattedPhone = '234' + formattedPhone.slice(1);
-  } else if (!formattedPhone.startsWith('234') && !formattedPhone.startsWith('+')) {
-    formattedPhone = '234' + formattedPhone;
-  }
-  
-  formattedPhone = formattedPhone.replace('+', '');
+  const to = normaliseNigerianMobile(phone);
+  if (!to) return { ok: false, error: 'Invalid Nigerian mobile number' };
 
   try {
-    const response = await fetch('https://api.ng.termii.com/api/sms/send', {
+    const res = await fetch(`${baseUrl}/api/sms/send`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: formattedPhone,
-        from: senderId,
-        sms: message,
-        type: "plain",
-        channel: "generic", 
-        api_key: apiKey,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, from: senderId, sms: message, type: 'plain', channel, api_key: apiKey }),
+      signal: AbortSignal.timeout(10_000),
     });
-
-    const data = await response.json();
-
-    if (data.message === "Successfully Sent") {
-      console.log(`SMS sent successfully to ${formattedPhone}`);
-      return true;
-    } else {
-      console.error("Termii Error:", data);
-      return false;
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && (data.message_id || data.message === 'Successfully Sent')) {
+      return { ok: true, messageId: data.message_id ? String(data.message_id) : null };
     }
+    return { ok: false, error: `Termii ${res.status}: ${JSON.stringify(data)?.slice(0, 300)}` };
   } catch (error) {
-    console.error("Failed to send Termii SMS:", error);
-    return false;
+    return { ok: false, error: `Termii request failed: ${error instanceof Error ? error.message : String(error)}` };
   }
 }

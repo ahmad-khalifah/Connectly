@@ -72,6 +72,7 @@ export default async function ConnectPage({
     .from('plans')
     .select('id, name, price_kobo, download_limit_kbps')
     .eq('is_active', true)
+    .or(`allowed_location_ids.is.null,allowed_location_ids.cs.{${locationData.id}}`)
     .order('price_kobo', { ascending: true });
 
   return (
