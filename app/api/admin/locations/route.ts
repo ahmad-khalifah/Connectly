@@ -1,7 +1,11 @@
+import { adminApiGuard } from '@/lib/auth/admin';
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 
 export async function POST(req: Request) {
+  const denied = await adminApiGuard();
+  if (denied) return denied;
+
   try {
     const body = await req.json();
     const { name, slug, building } = body;

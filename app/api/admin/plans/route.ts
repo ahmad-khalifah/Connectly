@@ -1,7 +1,11 @@
+import { adminApiGuard } from '@/lib/auth/admin';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
+  const denied = await adminApiGuard();
+  if (denied) return denied;
+
   try {
     const body = await request.json();
 

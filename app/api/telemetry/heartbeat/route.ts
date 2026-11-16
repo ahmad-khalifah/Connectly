@@ -1,10 +1,11 @@
+import { secretMatches } from '@/lib/auth/shared-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 
 export async function POST(req: NextRequest) {
   // Edge nodes use a secure preshared authentication token
   const authHeader = req.headers.get('x-connectly-node-key');
-  if (authHeader !== process.env.NODE_HEARTBEAT_SECRET) {
+  if (!secretMatches(authHeader, process.env.NODE_HEARTBEAT_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized hardware heartbeat' }, { status: 401 });
   }
 

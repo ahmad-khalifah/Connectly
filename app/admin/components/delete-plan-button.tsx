@@ -9,7 +9,7 @@ export default function DeletePlanButton({ planId }: { planId: string }) {
   const router = useRouter();
 
   const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this plan?')) return;
+    if (!window.confirm('Archive this plan? It will be hidden from customers; its purchase history is kept.')) return;
     
     setIsDeleting(true);
     try {
@@ -32,7 +32,7 @@ export default function DeletePlanButton({ planId }: { planId: string }) {
       onClick={handleDelete}
       disabled={isDeleting}
       className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-      title="Delete Plan"
+      title="Archive plan"
     >
       <Trash2 className="h-4 w-4" />
     </button>

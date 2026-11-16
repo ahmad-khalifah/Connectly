@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { sendTermiiSMS } from '@/lib/sms';
+import { secretMatches } from '@/lib/auth/shared-secret';
 
 export async function POST(request: Request) {
   try {
@@ -11,13 +11,22 @@ export async function POST(request: Request) {
 
     if (!secret) throw new Error('Missing Kora Secret Key');
 
-    // Verify Kora's webhook signature
-    const hash = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-    if (hash !== signature) {
+    // Verify Kora's webhook signature. Korapay signs ONLY the `data` object:
+    // HMAC-SHA256(JSON.stringify(body.data), secret key), hex-encoded, sent in
+    // x-korapay-signature. https://developers.korapay.com/docs/webhooks
+    let payload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return new NextResponse('Invalid payload', { status: 400 });
+    }
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(JSON.stringify(payload?.data ?? null))
+      .digest('hex');
+    if (!secretMatches(signature, expected)) {
       return new NextResponse('Invalid signature', { status: 401 });
     }
-
-    const payload = JSON.parse(rawBody);
 
     // Only process successful charge events
     if (payload.event === 'charge.success') {

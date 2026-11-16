@@ -1,7 +1,15 @@
+import { secretMatches } from '@/lib/auth/shared-secret';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 
+// Called by registered Connectly routers, not by browsers. It authorises a
+// device by phone number alone, so it must not be open to the internet.
+// Routers authenticate with the same pre-shared key as the heartbeat.
 export async function POST(req: NextRequest) {
+  if (!secretMatches(req.headers.get('x-connectly-node-key'), process.env.NODE_HEARTBEAT_SECRET)) {
+    return NextResponse.json({ error: 'Unauthorized node' }, { status: 401 });
+  }
+
   const { phone_number, mac_address, router_identifier, access_point_mac } = await req.json();
 
   if (!phone_number || !mac_address) {
