@@ -27,16 +27,20 @@ export default async function AdminDashboardOverview() {
     routersHealth,
     recentEvents
   ] = await Promise.all([
-    supabase.from('purchases').select('payment_gateway, gateway_fee_ngn, net_amount_ngn, created_at, phone_number, plans(duration_seconds)').order('created_at', { ascending: false }),
+    supabase.from('purchases').select('status, amount_kobo, amount_paid, gateway_fee_ngn, net_amount_ngn, created_at, paid_at, expires_at, phone_number').eq('status', 'paid').order('created_at', { ascending: false }),
     supabase.from('locations').select('id, name, status'),
     supabase.from('routers').select('id, identifier, status, cpu_usage_pct, wan_status'),
     supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(8)
   ]);
 
   // Financial calculations
-  const successfulPurchases = revenueData.data?.filter(p => p.payment_gateway === 'kora payment gateway') || [];
-  
-  const grossRevenue = successfulPurchases.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
+  // Only verified payments count (status = 'paid', set by confirm_payment).
+  const successfulPurchases = revenueData.data || [];
+
+  const grossRevenue = successfulPurchases.reduce(
+    (acc, curr) => acc + Number(curr.amount_paid || curr.net_amount_ngn || 0),
+    0
+  );
   const totalFees = successfulPurchases.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);
   const netRevenue = grossRevenue - totalFees;
 
@@ -48,18 +52,14 @@ export default async function AdminDashboardOverview() {
     
     // Only process the most recent purchase per phone number
     if (!customerMap.has(phone)) {
-      const plan = Array.isArray(p.plans) ? p.plans[0] : p.plans;
-      const durationSec = plan?.duration_seconds || 0;
-      const expiryDate = new Date(new Date(p.created_at).getTime() + durationSec * 1000);
-      
-      const isOnline = expiryDate > new Date();
+      const isOnline = !!p.expires_at && new Date(p.expires_at) > new Date();
       customerMap.set(phone, isOnline);
     }
   });
 
   // Calculate live numbers
   const totalActiveSubs = Array.from(customerMap.values()).filter(isOnline => isOnline).length;
-  const activeUsersOnline = totalActiveSubs; // Derived equivalent until live Radius session tracking is built
+  const activeUsersOnline = totalActiveSubs; // Paid plans not yet expired; live router sessions arrive with the network controller
 
   // Network infrastructure stats
   const totalLocations = locationsHealth.data?.length || 0;

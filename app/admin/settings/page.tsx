@@ -1,4 +1,5 @@
 import { Settings, Shield, Users, Cable, Bell } from 'lucide-react';
+import SmsTestCard from './sms-test-card';
 
 export default function SettingsPage() {
   return (
@@ -9,6 +10,8 @@ export default function SettingsPage() {
         </h1>
         <p className="text-sm text-slate-500">Configure business parameters, access roles, and external APIs.</p>
       </div>
+
+      <SmsTestCard />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Navigation Sidebar for Settings */}
