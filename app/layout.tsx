@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { appEnv } from "@/lib/env";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -45,7 +46,14 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       {/* Head is automatically managed by Next.js */}
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {appEnv() !== "production" && (
+          <div className="w-full bg-amber-400 text-black text-center text-xs font-bold py-1 tracking-wide">
+            {appEnv().toUpperCase()} ENVIRONMENT: test data and sandbox payments only
+          </div>
+        )}
+        {children}
+      </body>
     </html>
   );
 }

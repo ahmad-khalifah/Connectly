@@ -1,5 +1,5 @@
 import { CreditCard, Plus, Wifi, Zap, Smartphone } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 import Link from 'next/link';
 import DeletePlanButton from '../components/delete-plan-button';
 
@@ -13,7 +13,7 @@ export default async function PlansPage() {
     return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+  const supabase = db;
 
   const { data: plans, error } = await supabase
     .from('plans')

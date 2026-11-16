@@ -1,6 +1,6 @@
 import { Users, Search, CreditCard, MoreVertical } from 'lucide-react';
 import Link from 'next/link';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,7 @@ export default async function CustomersPage({
     return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+  const supabase = db;
 
   // Fetch successful purchases to derive customer states
   const { data: purchases, error } = await supabase
@@ -30,11 +30,11 @@ export default async function CustomersPage({
       id,
       phone_number,
       created_at,
-      payment_gateway,
+      expires_at,
       plans(name, duration_seconds),
       locations(name)
     `)
-    .eq('payment_gateway', 'kora')
+    .eq('status', 'paid')
     .order('created_at', { ascending: false });
 
   if (error) console.error('[PURCHASES_FETCH_ERROR]', error);
@@ -50,9 +50,8 @@ export default async function CustomersPage({
       const plan = Array.isArray(p.plans) ? p.plans[0] : p.plans;
       const location = Array.isArray(p.locations) ? p.locations[0] : p.locations;
       
-      const durationSec = plan?.duration_seconds || 0;
-      const expiryDate = new Date(new Date(p.created_at).getTime() + durationSec * 1000);
-      const isOnline = expiryDate > new Date();
+      const expiryDate = p.expires_at ? new Date(p.expires_at) : null;
+      const isOnline = !!expiryDate && expiryDate > new Date();
 
       customerMap.set(phone, {
         id: p.id,
@@ -61,7 +60,7 @@ export default async function CustomersPage({
         planName: plan?.name || 'Unknown Plan',
         isOnline: isOnline,
         currentLocation: location?.name || 'Remote',
-        expiry: expiryDate.toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })
+        expiry: expiryDate ? expiryDate.toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : '—'
       });
     }
   });

@@ -1,5 +1,5 @@
 import { TrendingUp, DollarSign, PieChart, Activity } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,20 +11,21 @@ export default async function RevenueAnalyticsPage() {
     return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
   }
 
-  const supabase = createClient(supabaseUrl, supabaseRoleKey);
+  const supabase = db;
 
   const { data: revenueData, error } = await supabase
     .from('purchases')
-    .select('gateway_fee_ngn, net_amount_ngn, payment_gateway, created_at, plans(name), locations(name)')
-    .eq('payment_gateway', 'kora payment gateway');
+    .select('amount_paid, gateway_fee_ngn, net_amount_ngn, created_at, plans(name), locations(name)')
+    .eq('status', 'paid');
 
   if (error) console.error('[REVENUE_FETCH_ERROR]', error);
 
   const transactions = revenueData || [];
   
-  const netRevenue = transactions.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0);
+  // Gross = what customers paid; net = gross minus Korapay's fees.
+  const grossRevenue = transactions.reduce((acc, curr) => acc + Number(curr.amount_paid || curr.net_amount_ngn || 0), 0);
   const totalFees = transactions.reduce((acc, curr) => acc + Number(curr.gateway_fee_ngn || 0), 0);
-  const grossRevenue = netRevenue + totalFees;
+  const netRevenue = grossRevenue - totalFees;
   const avgTransactionValue = transactions.length > 0 ? grossRevenue / transactions.length : 0;
 
   return (

@@ -1,0 +1,49 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const PROD_URL = 'https://plydltvxfozxflarrfrx.supabase.co';
+const STAGING_URL = 'https://stagingref123.supabase.co';
+
+async function load(env: Record<string, string | undefined>) {
+  vi.resetModules();
+  for (const k of ['VERCEL_ENV', 'NEXT_PUBLIC_SUPABASE_URL', 'KORA_SECRET_KEY', 'NEXT_PUBLIC_APP_URL', 'VERCEL_BRANCH_URL', 'VERCEL_PROJECT_PRODUCTION_URL', 'ALLOW_PRODUCTION_DB_OUTSIDE_PRODUCTION']) delete process.env[k];
+  Object.assign(process.env, env);
+  return import('@/lib/env');
+}
+
+describe('environment guard', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('blocks a preview deployment pointed at the production database', async () => {
+    const env = await load({ VERCEL_ENV: 'preview', NEXT_PUBLIC_SUPABASE_URL: PROD_URL, KORA_SECRET_KEY: 'sk_test_x' });
+    expect(() => env.assertSafeEnvironment()).toThrow(/PRODUCTION database/);
+  });
+  it('blocks a live Korapay key outside production', async () => {
+    const env = await load({ VERCEL_ENV: 'preview', NEXT_PUBLIC_SUPABASE_URL: STAGING_URL, KORA_SECRET_KEY: 'sk_live_x' });
+    expect(() => env.assertSafeEnvironment()).toThrow(/LIVE Korapay key/);
+  });
+  it('blocks local development against production too', async () => {
+    const env = await load({ NEXT_PUBLIC_SUPABASE_URL: PROD_URL });
+    expect(() => env.assertSafeEnvironment()).toThrow(/development deployment/);
+  });
+  it('allows preview with staging + sandbox keys', async () => {
+    const env = await load({ VERCEL_ENV: 'preview', NEXT_PUBLIC_SUPABASE_URL: STAGING_URL, KORA_SECRET_KEY: 'sk_test_x' });
+    expect(() => env.assertSafeEnvironment()).not.toThrow();
+  });
+  it('allows production with the production database and warns on a test key', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const env = await load({ VERCEL_ENV: 'production', NEXT_PUBLIC_SUPABASE_URL: PROD_URL, KORA_SECRET_KEY: 'sk_test_x' });
+    expect(() => env.assertSafeEnvironment()).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/TEST key/));
+  });
+});
+
+describe('appUrl', () => {
+  it('uses the stable branch URL on previews, never production', async () => {
+    const env = await load({ VERCEL_ENV: 'preview', VERCEL_BRANCH_URL: 'connectly-git-x.vercel.app', NEXT_PUBLIC_APP_URL: 'https://getconnectly.net' });
+    expect(env.appUrl()).toBe('https://connectly-git-x.vercel.app');
+  });
+  it('uses NEXT_PUBLIC_APP_URL in production', async () => {
+    const env = await load({ VERCEL_ENV: 'production', NEXT_PUBLIC_APP_URL: 'https://getconnectly.net/' });
+    expect(env.appUrl()).toBe('https://getconnectly.net');
+  });
+});

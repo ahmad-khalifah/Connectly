@@ -50,6 +50,7 @@ export default function PortalClient({ mac, ip, routerId, location, plans }: Por
         mac,
         ip,
         routerId,
+        locationId: location.id,
         planId: selectedPlan.id,
         phone
       });

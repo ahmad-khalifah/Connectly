@@ -1,6 +1,6 @@
 import { adminApiGuard } from '@/lib/auth/admin';
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '@/lib/db/client';
 
 export async function POST(request: Request) {
   const denied = await adminApiGuard();
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     }
 
     // Initialize admin client to bypass RLS
-    const supabaseAdmin = createClient(supabaseUrl, supabaseRoleKey);
+    const supabaseAdmin = db;
 
     const { error } = await supabaseAdmin.from('plans').insert({
       name: body.name,
