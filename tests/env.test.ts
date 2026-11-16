@@ -5,7 +5,7 @@ const STAGING_URL = 'https://stagingref123.supabase.co';
 
 async function load(env: Record<string, string | undefined>) {
   vi.resetModules();
-  for (const k of ['VERCEL_ENV', 'NEXT_PUBLIC_SUPABASE_URL', 'KORA_SECRET_KEY', 'NEXT_PUBLIC_APP_URL', 'VERCEL_BRANCH_URL', 'VERCEL_PROJECT_PRODUCTION_URL', 'ALLOW_PRODUCTION_DB_OUTSIDE_PRODUCTION']) delete process.env[k];
+  for (const k of ['VERCEL_ENV', 'NEXT_PUBLIC_SUPABASE_URL', 'KORA_SECRET_KEY', 'NEXT_PUBLIC_APP_URL', 'VERCEL_BRANCH_URL', 'VERCEL_PROJECT_PRODUCTION_URL', 'ALLOW_PRODUCTION_DB_OUTSIDE_PRODUCTION', 'VERCEL_AUTOMATION_BYPASS_SECRET']) delete process.env[k];
   Object.assign(process.env, env);
   return import('@/lib/env');
 }
@@ -45,5 +45,20 @@ describe('appUrl', () => {
   it('uses NEXT_PUBLIC_APP_URL in production', async () => {
     const env = await load({ VERCEL_ENV: 'production', NEXT_PUBLIC_APP_URL: 'https://getconnectly.net/' });
     expect(env.appUrl()).toBe('https://getconnectly.net');
+  });
+});
+
+describe('korapayWebhookUrl', () => {
+  it('adds the Vercel bypass token on previews so Korapay reaches the protected preview', async () => {
+    const env = await load({ VERCEL_ENV: 'preview', VERCEL_BRANCH_URL: 'connectly-git-x.vercel.app', VERCEL_AUTOMATION_BYPASS_SECRET: 'abc123' });
+    expect(env.korapayWebhookUrl()).toBe('https://connectly-git-x.vercel.app/api/webhooks/kora?x-vercel-protection-bypass=abc123');
+  });
+  it('never adds it in production, even if the variable exists', async () => {
+    const env = await load({ VERCEL_ENV: 'production', NEXT_PUBLIC_APP_URL: 'https://getconnectly.net', VERCEL_AUTOMATION_BYPASS_SECRET: 'abc123' });
+    expect(env.korapayWebhookUrl()).toBe('https://getconnectly.net/api/webhooks/kora');
+  });
+  it('plain URL on a preview without a token', async () => {
+    const env = await load({ VERCEL_ENV: 'preview', VERCEL_BRANCH_URL: 'connectly-git-x.vercel.app' });
+    expect(env.korapayWebhookUrl()).toBe('https://connectly-git-x.vercel.app/api/webhooks/kora');
   });
 });
