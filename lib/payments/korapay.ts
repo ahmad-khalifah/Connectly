@@ -43,6 +43,12 @@ export type InitializeChargeInput = {
 };
 
 /** Starts a hosted checkout and returns the checkout URL. */
+/** Korapay rejects empty metadata values (422), so blank fields are left out. */
+export function cleanMetadata(metadata: Record<string, string>): Record<string, string> | undefined {
+  const entries = Object.entries(metadata).filter(([, v]) => typeof v === 'string' && v.trim() !== '');
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 export async function initializeCharge(input: InitializeChargeInput): Promise<string> {
   const res = await fetch(`${BASE_URL}/charges/initialize`, {
     method: 'POST',
@@ -52,7 +58,7 @@ export async function initializeCharge(input: InitializeChargeInput): Promise<st
       amount: input.amountKobo / 100,
       currency: input.currency,
       customer: input.customer,
-      metadata: input.metadata,
+      metadata: cleanMetadata(input.metadata),
       redirect_url: input.redirectUrl,
       notification_url: input.notificationUrl,
     }),

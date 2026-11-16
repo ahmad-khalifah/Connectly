@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import crypto from 'crypto';
-import { nairaToKobo, verifyWebhookSignature, verifyCharge } from '@/lib/payments/korapay';
+import { nairaToKobo, verifyWebhookSignature, verifyCharge, initializeCharge, cleanMetadata } from '@/lib/payments/korapay';
 import { normaliseNigerianMobile } from '@/lib/phone';
 
 const SECRET = 'sk_test_unit';
@@ -82,4 +82,28 @@ describe('Nigerian mobile numbers', () => {
   it.each(['0912897654', '12345', '05031234567', '+44 7700 900123', ''])('rejects %s', (input) =>
     expect(normaliseNigerianMobile(input)).toBeNull()
   );
+});
+
+describe('initializeCharge metadata (Korapay 422s on empty values)', () => {
+  it('drops blank values and keeps the rest', () => {
+    expect(cleanMetadata({ plan_id: 'p', router_id: '', mac_address: '  ', ip_address: '10.5.50.2' }))
+      .toEqual({ plan_id: 'p', ip_address: '10.5.50.2' });
+  });
+  it('omits metadata entirely when every value is blank', () => {
+    expect(cleanMetadata({ router_id: '', mac_address: '' })).toBeUndefined();
+  });
+  it('never sends an empty metadata value to Korapay', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: true, data: { checkout_url: 'https://checkout.korapay.com/x' } }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const url = await initializeCharge({
+      reference: 'CONN_x', amountKobo: 25000, currency: 'NGN',
+      customer: { name: 'n', email: 'e@example.com' },
+      metadata: { plan_id: 'p', location_id: 'l', router_id: '', mac_address: '', ip_address: '' },
+      redirectUrl: 'https://example.com/success', notificationUrl: 'https://example.com/hook',
+    });
+    expect(url).toBe('https://checkout.korapay.com/x');
+    const body = JSON.parse((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.metadata).toEqual({ plan_id: 'p', location_id: 'l' });
+    expect(body.amount).toBe(250);
+  });
 });
