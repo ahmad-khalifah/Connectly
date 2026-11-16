@@ -18,7 +18,7 @@ export default async function LocationDetailPage({ params }: { params: Promise<{
   const [locationRes, backhaulRes, routersRes, apRes, sessionsRes, purchasesRes, plansRes] = await Promise.all([
     db.from('locations').select('*, institutions(name)').eq('id', id).single(),
     db.from('backhauls').select('*').eq('location_id', id),
-    db.from('routers').select('*').eq('location_id', id),
+    db.from('routers').select('id, name, identifier, lifecycle_status, status, model, tunnel_ip, management_ip, api_ip, uptime_seconds, cpu_usage_pct, memory_usage_pct, wan_status, last_heartbeat, last_seen_at, is_online').eq('location_id', id),
     db.from('access_points').select('*').eq('location_id', id),
     db.from('network_sessions').select('id', { count: 'exact' }).eq('location_id', id).eq('status', 'active'),
     db.from('purchases')

@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, Users, CreditCard, MapPin, Network, 
   ArrowLeftRight, TrendingUp, Receipt, BarChart3, 
-  LifeBuoy, Cable, FileText, Settings, LogOut, ShieldAlert
+  LifeBuoy, Cable, FileText, Settings, LogOut, ShieldAlert, ListChecks
 } from 'lucide-react';
 
 interface NavItem {
@@ -30,7 +30,8 @@ const NAVIGATION_GROUPS: { group: string; items: NavItem[] }[] = [
   {
     group: 'NETWORK INFRASTRUCTURE',
     items: [
-      { name: 'Network Fleet', href: '/admin/network', icon: Network, roles: ['owner', 'admin', 'network_engineer'] },
+      { name: 'Network', href: '/admin/network', icon: Network, roles: ['owner', 'admin', 'network_engineer'] },
+      { name: 'Controller Jobs', href: '/admin/network/jobs', icon: ListChecks, roles: ['owner', 'admin', 'network_engineer'] },
       { name: 'Bandwidth & Sessions', href: '/admin/usage', icon: BarChart3, roles: ['owner', 'admin', 'network_engineer'] },
       { name: 'Integrations & APIS', href: '/admin/apis', icon: Cable, roles: ['owner', 'admin', 'network_engineer'] },
     ]

@@ -23,11 +23,12 @@ export default async function ConnectPage({
       .from('routers')
       .select('id, locations(id, name, slug)')
       .eq('identifier', routerIdentifier)
-      .single();
+      .eq('lifecycle_status', 'active') // only an activated router sells plans
+      .maybeSingle();
     
     if (routerData && routerData.locations) {
       routerIdStr = routerData.id;
-      const locationRaw = routerData.locations as any;
+      const locationRaw = routerData.locations as { id: string; name: string; slug: string } | { id: string; name: string; slug: string }[];
       locationData = Array.isArray(locationRaw) ? locationRaw[0] : locationRaw;
     }
   }
