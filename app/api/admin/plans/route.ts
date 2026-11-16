@@ -1,40 +1,30 @@
-import { adminApiGuard } from '@/lib/auth/admin';
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
+import { requireAdminApi } from '@/lib/auth/admin';
+import { parsePlanInput, planRow } from '@/lib/admin/inputs';
+import { logAdminAction } from '@/lib/admin/audit';
 
 export async function POST(request: Request) {
-  const denied = await adminApiGuard();
+  const { user, denied } = await requireAdminApi();
   if (denied) return denied;
 
-  try {
-    const body = await request.json();
+  const parsed = parsePlanInput(await request.json().catch(() => null));
+  if (!parsed.ok) return NextResponse.json({ message: parsed.error }, { status: 400 });
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Single-organisation deployment: plans belong to the first organisation.
+  const { data: org } = await db.from('organizations').select('id').order('created_at').limit(1).maybeSingle();
 
-    if (!supabaseUrl || !supabaseRoleKey) {
-      throw new Error('Missing Supabase Admin Keys in environment.');
-    }
+  const { data, error } = await db
+    .from('plans')
+    .insert({ ...planRow(parsed.value), organization_id: org?.id ?? null })
+    .select('id')
+    .single();
 
-    // Initialize admin client to bypass RLS
-    const supabaseAdmin = db;
-
-    const { error } = await supabaseAdmin.from('plans').insert({
-      name: body.name,
-      price_kobo: body.price_kobo,
-      duration_seconds: body.duration_seconds,
-      download_speed: body.download_speed,
-      upload_speed: body.upload_speed
-    });
-
-    if (error) {
-      console.error('[SUPABASE_INSERT_ERROR]', error);
-      throw error;
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
+  if (error || !data) {
     console.error('[PLAN_CREATE_ERROR]', error);
-    return NextResponse.json({ message: error.message }, { status: 500 });
+    return NextResponse.json({ message: 'Could not create the plan.' }, { status: 500 });
   }
+
+  await logAdminAction(user, 'plan.created', `Plan "${parsed.value.name}" created`, data.id, { metadata: planRow(parsed.value) });
+  return NextResponse.json({ success: true, id: data.id }, { status: 201 });
 }

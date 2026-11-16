@@ -1,48 +1,22 @@
-import { adminApiGuard } from '@/lib/auth/admin';
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
+import { requireAdminApi } from '@/lib/auth/admin';
+import { friendlyDbError, locationRow, parseLocationInput } from '@/lib/admin/inputs';
+import { logAdminAction } from '@/lib/admin/audit';
 
 export async function POST(req: Request) {
-  const denied = await adminApiGuard();
+  const { user, denied } = await requireAdminApi();
   if (denied) return denied;
 
-  try {
-    const body = await req.json();
-    const { name, slug, building } = body;
+  const parsed = parseLocationInput(await req.json().catch(() => null));
+  if (!parsed.ok) return NextResponse.json({ message: parsed.error }, { status: 400 });
 
-    if (!name || !slug) {
-      return NextResponse.json(
-        { message: 'Name and slug are required fields.' },
-        { status: 400 }
-      );
-    }
-
-    // Insert the new location into Supabase
-    const { data, error } = await db
-      .from('locations')
-      .insert([
-        { 
-          name, 
-          slug, 
-          building,
-          status: 'active' // Sets a default status for new facilities
-        }
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json(
-        { message: error.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ data }, { status: 201 });
-  } catch (err: any) {
-    return NextResponse.json(
-      { message: err.message || 'An unexpected error occurred.' },
-      { status: 500 }
-    );
+  const { data, error } = await db.from('locations').insert(locationRow(parsed.value)).select('id, name').single();
+  if (error || !data) {
+    console.error('[LOCATION_CREATE_ERROR]', error);
+    return NextResponse.json({ message: friendlyDbError(error, 'Could not create the location.') }, { status: error?.code === '23505' ? 409 : 500 });
   }
+
+  await logAdminAction(user, 'location.created', `Location "${data.name}" created`, data.id, { locationId: data.id });
+  return NextResponse.json({ data }, { status: 201 });
 }

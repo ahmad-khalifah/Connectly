@@ -1,4 +1,4 @@
-import { Users, Search, CreditCard, MoreVertical } from 'lucide-react';
+import { Users, Search, CreditCard, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 
@@ -28,7 +28,10 @@ export default async function CustomersPage({
     .from('purchases')
     .select(`
       id,
+      customer_id,
       phone_number,
+      amount_paid,
+      net_amount_ngn,
       created_at,
       expires_at,
       plans(name, duration_seconds),
@@ -44,8 +47,14 @@ export default async function CustomersPage({
   
   purchases?.forEach((p) => {
     const phone = p.phone_number || 'Unknown';
-    
-    if (!customerMap.has(phone)) {
+    const spent = Number(p.amount_paid || p.net_amount_ngn || 0);
+
+    if (customerMap.has(phone)) {
+      const existing = customerMap.get(phone);
+      existing.purchaseCount += 1;
+      existing.totalSpent += spent;
+      existing.customerId = existing.customerId || p.customer_id;
+    } else {
       // Safely extract relational data handling Supabase array/object type returns
       const plan = Array.isArray(p.plans) ? p.plans[0] : p.plans;
       const location = Array.isArray(p.locations) ? p.locations[0] : p.locations;
@@ -55,6 +64,9 @@ export default async function CustomersPage({
 
       customerMap.set(phone, {
         id: p.id,
+        customerId: p.customer_id as string | null,
+        purchaseCount: 1,
+        totalSpent: spent,
         phone: phone,
         joined: p.created_at,
         planName: plan?.name || 'Unknown Plan',
@@ -104,13 +116,14 @@ export default async function CustomersPage({
         </form>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-xs">
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-900 text-xs uppercase tracking-wider font-semibold">
             <tr>
               <th className="px-6 py-4">Subscriber</th>
               <th className="px-6 py-4">Active Plan</th>
-              <th className="px-6 py-4">Network Status</th>
+              <th className="px-6 py-4">Access</th>
+              <th className="px-6 py-4">Purchases</th>
               <th className="px-6 py-4">Location</th>
               <th className="px-6 py-4">Valid Until</th>
               <th className="px-6 py-4 text-right">Actions</th>
@@ -129,26 +142,33 @@ export default async function CustomersPage({
                 <td className="px-6 py-4">
                   {customer.isOnline ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Online
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                      Offline
+                      Expired
                     </span>
                   )}
+                </td>
+                <td className="px-6 py-4 text-xs whitespace-nowrap">
+                  {customer.purchaseCount} · ₦{customer.totalSpent.toLocaleString('en-NG')}
                 </td>
                 <td className="px-6 py-4 text-slate-500 text-xs font-medium">{customer.currentLocation}</td>
                 <td className="px-6 py-4 text-xs font-mono">{customer.expiry}</td>
                 <td className="px-6 py-4 text-right">
-                  <button className="p-1 text-slate-400 hover:text-[#6d1825] transition-colors">
-                    <MoreVertical className="h-4 w-4" />
-                  </button>
+                  {customer.customerId ? (
+                    <Link href={`/admin/customers/${customer.customerId}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-[#6d1825]">
+                      History <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <span className="text-[11px] text-slate-400">No profile</span>
+                  )}
                 </td>
               </tr>
             ))}
             {paginatedCustomers.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                   No customers found.
                 </td>
               </tr>
