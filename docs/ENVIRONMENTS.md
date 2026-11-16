@@ -42,7 +42,7 @@ Never paste keys into chat, issues or commits. Rotate any key that was.
 ## Setting up the staging database
 
 1. Create the staging Supabase project (separate from production).
-2. Apply, in order: `supabase/baseline/20261116_production_public_schema.sql`, then every file in `supabase/migrations/` by name.
+2. Apply, in order: `supabase/baseline/20261116_production_public_schema.sql`, then each file in `supabase/migrations/` by name **that has been approved for staging**. A migration not yet approved stays unapplied, even though its file is in the repo.
 3. Create the staging admin user (`connectly.hq@outlook.com`) in staging Auth with its own password.
 4. Seed test locations and plans through the admin dashboard (not from production data).
 5. Turn off public sign-ups in staging Auth too.

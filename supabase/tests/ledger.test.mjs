@@ -174,7 +174,7 @@ test('service_role can confirm payments', async () => {
 
 test('rollback restores the exact pre-migration schema', async () => {
   const before = await fingerprint(await freshDb({ upTo: '20261116120000_security_lockdown.sql' }));
-  const db = await freshDb();
+  const db = await freshDb({ upTo: '20261117090000_payment_ledger.sql' });
   await db.exec(fs.readFileSync(path.resolve(import.meta.dirname, '../rollbacks/20261117090000_payment_ledger.rollback.sql'), 'utf8'));
   const after = await fingerprint(db);
   assert.equal(after, before);

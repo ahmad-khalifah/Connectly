@@ -43,5 +43,8 @@ export async function fingerprint(db) {
     await q(`select indexname, indexdef from pg_indexes where schemaname='public' order by 1`),
     await q(`select relname, relrowsecurity from pg_class where relnamespace='public'::regnamespace and relkind='r' order by 1`),
     await q(`select proname from pg_proc where pronamespace='public'::regnamespace order by 1`),
+    await q(`select tablename, policyname, cmd, roles::text from pg_policies where schemaname='public' order by 1,2`),
+    await q(`select tgrelid::regclass::text, tgname from pg_trigger where not tgisinternal order by 1,2`),
+    await q(`select rolname from pg_roles where rolname like 'connectly%' order by 1`),
   ].join('\n');
 }
