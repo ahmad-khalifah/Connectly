@@ -1,4 +1,5 @@
-'use server';
+// Server-only module. Do NOT add 'use server': that would turn this into a
+// public Server Function anyone could call to send SMS on our account.
 
 export async function sendTermiiSMS(phone: string, message: string) {
   const apiKey = process.env.TERMII_API_KEY;

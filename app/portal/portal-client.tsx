@@ -45,8 +45,8 @@ export default function PortalClient({ mac, ip, routerId, location, plans }: Por
     
     try {
       // 2. We now call the secure backend action
-      const checkoutUrl = await initializeKoraCheckout({
-        amount: priceNaira,
+      // The server prices the plan from the database; the browser sends no amount.
+      const result = await initializeKoraCheckout({
         mac,
         ip,
         routerId,
@@ -54,16 +54,17 @@ export default function PortalClient({ mac, ip, routerId, location, plans }: Por
         phone
       });
 
-      // 3. Redirect the user to the Kora-hosted payment page
-      if (checkoutUrl) {
-        window.location.href = checkoutUrl;
-      } else {
-        throw new Error("No checkout URL returned from Kora");
+      if (!result.ok) {
+        alert(result.error);
+        setIsProcessing(false);
+        return;
       }
 
+      // Redirect the user to the Kora-hosted payment page
+      window.location.href = result.checkoutUrl;
     } catch (error) {
       console.error("Checkout Error:", error);
-      alert("Unable to start payment. Please check your console for details.");
+      alert("Unable to start payment. Please check your connection and try again.");
       setIsProcessing(false);
     }
   };
