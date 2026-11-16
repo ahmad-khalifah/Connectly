@@ -59,7 +59,8 @@ export default async function PortalPage({
     .from('routers')
     .select('id, locations(id, name, slug)')
     .eq('identifier', routerIdentifier)
-    .single();
+    .eq('lifecycle_status', 'active') // only an activated router sells plans
+    .maybeSingle();
 
   if (!routerData || !routerData.locations) {
     return (

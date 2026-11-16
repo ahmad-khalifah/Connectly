@@ -73,8 +73,9 @@ async function startCheckout(payload: CheckoutInput): Promise<{ checkoutUrl: str
   if (!Number.isInteger(amountKobo) || amountKobo <= 0) throw new CheckoutError('This plan is not available.');
 
   if (routerId) {
-    const { data: router } = await db.from('routers').select('id, location_id').eq('id', routerId).maybeSingle();
+    const { data: router } = await db.from('routers').select('id, location_id, lifecycle_status').eq('id', routerId).maybeSingle();
     if (!router || router.location_id !== location.id) throw new CheckoutError('Unrecognised network equipment.');
+    if (router.lifecycle_status !== 'active') throw new CheckoutError('This network is not taking payments yet.');
   }
 
   const reference = `CONN_${randomUUID()}`;

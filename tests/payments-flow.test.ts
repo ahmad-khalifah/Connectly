@@ -164,7 +164,7 @@ describe('initializeKoraCheckout', () => {
   const world = (overrides: { plan?: object; location?: object; router?: object | null } = {}): Handler => (op) => {
     if (op.table === 'locations') return { data: { id: LOC, name: 'Garki', is_active: true, ...overrides.location }, error: null };
     if (op.table === 'plans') return { data: { id: PLAN, name: 'Day', price_kobo: 25000, is_active: true, allowed_location_ids: null, ...overrides.plan }, error: null };
-    if (op.table === 'routers') return { data: overrides.router === undefined ? { id: ROUTER, location_id: LOC } : overrides.router, error: null };
+    if (op.table === 'routers') return { data: overrides.router === undefined ? { id: ROUTER, location_id: LOC, lifecycle_status: 'active' } : overrides.router, error: null };
     if (op.table === 'purchases' && op.action === 'insert') return { data: null, error: null };
     return { data: null, error: null };
   };
@@ -210,6 +210,14 @@ describe('initializeKoraCheckout', () => {
   it('refuses a router that belongs to another location', async () => {
     fake = createFakeDb(world({ router: { id: ROUTER, location_id: OTHER_LOC } }));
     expect(await call({ routerId: ROUTER })).toEqual({ ok: false, error: 'Unrecognised network equipment.' });
+  });
+
+  it('refuses a router that is not Active (registered, suspended or retired)', async () => {
+    for (const lifecycle_status of ['registered', 'suspended', 'retired']) {
+      fake = createFakeDb(world({ router: { id: ROUTER, location_id: LOC, lifecycle_status } }));
+      expect(await call({ routerId: ROUTER })).toEqual({ ok: false, error: 'This network is not taking payments yet.' });
+      expect(fake.ops.some((o) => o.table === 'purchases')).toBe(false);
+    }
   });
 
   it('marks the purchase failed if Korapay cannot start the checkout', async () => {
