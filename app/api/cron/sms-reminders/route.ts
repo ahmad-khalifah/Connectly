@@ -41,14 +41,20 @@ export async function GET(request: Request) {
     // For MVP, you can filter strictly by the time window.
     if (timeRemainingMinutes > 0 && timeRemainingMinutes <= 60) {
       const msg = `Connectly Alert: Your ${plan.name} will expire in less than an hour. Top up now at connectly.net/login to stay connected.`;
-      await sendSMS(p.phone_number, msg);
+      await sendTermiiSMS(...{
+        to: p.phone_number,
+        message: msg,
+      });
       messagesSent++;
     }
 
     // 2. "Exhausted" Reminder (e.g., expired within the last 60 minutes)
     if (timeRemainingMinutes <= 0 && timeRemainingMinutes > -60) {
       const msg = `Connectly Alert: Your ${plan.name} has expired. Please visit connectly.net/login to purchase a new pass or data bundle.`;
-      await sendSMS(p.phone_number, msg);
+      await sendTermiiSMS(...{
+        to: p.phone_number,
+        message: msg,
+      });
       messagesSent++;
     }
   }

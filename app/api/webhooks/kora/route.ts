@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { sendSMS } from '@/lib/sms'; // Optional: if you implemented the Termii SMS
+import { sendTermiiSMS } from '@/lib/sms';
 
 export async function POST(request: Request) {
   try {
