@@ -3,7 +3,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '@/lib/db/client';
 import { normaliseNigerianMobile } from '@/lib/phone';
-import { appUrl } from '@/lib/env';
+import { appUrl, korapayWebhookUrl } from '@/lib/env';
 import { initializeCharge, KorapayConfigError } from '@/lib/payments/korapay';
 
 // Public Server Function: anyone can call it with any arguments, so it
@@ -111,7 +111,7 @@ async function startCheckout(payload: CheckoutInput): Promise<{ checkoutUrl: str
         ip_address: ip ?? '',
       },
       redirectUrl: `${baseUrl}/success?reference=${encodeURIComponent(reference)}`,
-      notificationUrl: `${baseUrl}/api/webhooks/kora`,
+      notificationUrl: korapayWebhookUrl(),
     });
     return { checkoutUrl, reference };
   } catch (error) {
