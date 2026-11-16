@@ -13,28 +13,32 @@ export default async function LocationsDirectoryPage() {
       name,
       slug,
       status,
+      is_active,
       institutions(name),
       routers(id),
       access_points(id),
-      network_sessions(id),
-      purchases(net_amount_ngn)
+      network_sessions(status),
+      purchases(status, amount_paid, net_amount_ngn)
     `)
     .order('name', { ascending: true });
 
   const formattedLocations = locations?.map(loc => {
-    const activeSessions = (loc.network_sessions as any[])?.length || 0;
-    const revenue = (loc.purchases as any[])?.reduce((acc, curr) => acc + Number(curr.net_amount_ngn || 0), 0) || 0;
+    const activeSessions = ((loc.network_sessions as { status: string | null }[]) ?? []).filter((s) => s.status === 'active').length;
+    // Gross takings from verified payments only (pending and failed purchases are excluded).
+    const revenue = ((loc.purchases as { status: string; amount_paid: number | null; net_amount_ngn: number | null }[]) ?? [])
+      .filter((p) => p.status === 'paid')
+      .reduce((acc, p) => acc + Number(p.amount_paid || p.net_amount_ngn || 0), 0);
     
     // Evaluate the array vs object mismatch from Supabase generated types
-    const inst = loc.institutions as any;
+    const inst = loc.institutions as { name: string } | { name: string }[] | null;
     const institutionName = Array.isArray(inst) ? inst[0]?.name : inst?.name;
     
     return {
       ...loc,
       activeSessions,
       revenue,
-      routerCount: (loc.routers as any[])?.length || 0,
-      apCount: (loc.access_points as any[])?.length || 0,
+      routerCount: (loc.routers as unknown[] | null)?.length || 0,
+      apCount: (loc.access_points as unknown[] | null)?.length || 0,
       institutionName: institutionName || 'Independent Facility',
     };
   }) || [];
@@ -64,7 +68,10 @@ export default async function LocationsDirectoryPage() {
 
           return (
             <div key={location.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs relative flex flex-col">
-              <div className="absolute top-4 right-4">
+              <div className="absolute top-4 right-4 flex gap-1">
+                {location.is_active === false && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase border bg-slate-100 text-slate-500 border-slate-200">Not selling</span>
+                )}
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
                   location.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
                 }`}>
@@ -85,7 +92,7 @@ export default async function LocationsDirectoryPage() {
                   <span className="font-mono font-bold text-slate-900">{location.activeSessions}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-600"><TrendingUp className="h-4 w-4 text-emerald-500"/> Revenue</span>
+                  <span className="flex items-center gap-2 text-slate-600"><TrendingUp className="h-4 w-4 text-emerald-500"/> Paid revenue</span>
                   <span className="font-mono font-bold text-slate-900">₦{location.revenue.toLocaleString('en-NG')}</span>
                 </div>
               </div>

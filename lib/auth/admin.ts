@@ -48,3 +48,12 @@ export async function adminApiGuard(): Promise<NextResponse | null> {
   }
   return null;
 }
+
+/** Like adminApiGuard, but also returns the admin so writes can be attributed. */
+export async function requireAdminApi(): Promise<
+  { user: User; denied: null } | { user: null; denied: NextResponse }
+> {
+  const user = await getAdminUser();
+  if (!user) return { user: null, denied: NextResponse.json({ message: 'Unauthorized' }, { status: 401 }) };
+  return { user, denied: null };
+}
