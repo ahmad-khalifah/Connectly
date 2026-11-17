@@ -89,6 +89,10 @@ test('bootstrap script: restricted group, API only from the controller, password
   assert.match(s, /policy="read,write,api,rest-api,test"/);
   assert.doesNotMatch(s, /policy="[^"]*(policy|sensitive|password|sniff|romon)/);
   assert.match(s, /\/ip service set www-ssl .*address=10\.77\.0\.1\/32/);
+  // RouterOS 7 needs a CA to sign the HTTPS certificate (found on CHR 7.25.1).
+  assert.match(s, /key-usage=key-cert-sign,crl-sign; \/certificate sign connectly-ca/);
+  assert.match(s, /\/certificate sign connectly-api ca=connectly-ca/);
+  assert.ok(s.indexOf('connectly-ca"') < s.indexOf('sign connectly-api'), 'CA is made before the server certificate is signed');
   assert.match(s, /address=10\.77\.0\.1\/32 password=/);
   const lines = s.split('\n').filter((l) => l.includes(pw));
   assert.equal(lines.length, 1);

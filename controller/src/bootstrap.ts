@@ -29,7 +29,14 @@ export function bootstrapScript(router: RouterRow, password: string, controllerI
     '# the setup script deletes this file after importing it.',
     `:if ([:len [/user group find name="${user}"]] = 0) do={ /user group add name="${user}" policy="read,write,api,rest-api,test" comment="Connectly controller" }`,
     `:if ([:len [/user find name="${user}"]] = 0) do={ /user add name="${user}" group="${user}" address=${controllerIp}/32 password="${ros(password)}" comment="Connectly controller" } else={ /user set [find name="${user}"] group="${user}" address=${controllerIp}/32 password="${ros(password)}" }`,
-    `:if ([:len [/certificate find name="connectly-api"]] = 0) do={ /certificate add name="connectly-api" common-name="${ros(router.identifier)}" key-size=2048 days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server; /certificate sign connectly-api }`,
+    // RouterOS 7 will not self-sign a tls-server certificate ("CA not found"),
+    // so the router gets its own small CA, which then signs the HTTPS cert.
+    // Found on CHR 7.25.1, 17 Nov 2026. Safe to re-run: signing an already
+    // signed certificate fails harmlessly inside on-error.
+    `:if ([:len [/certificate find name="connectly-ca"]] = 0) do={ /certificate add name="connectly-ca" common-name="connectly-ca-${ros(router.identifier)}" key-size=2048 days-valid=3650 key-usage=key-cert-sign,crl-sign; /certificate sign connectly-ca }`,
+    ':delay 5s',
+    `:if ([:len [/certificate find name="connectly-api"]] = 0) do={ /certificate add name="connectly-api" common-name="${ros(router.identifier)}" key-size=2048 days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server }`,
+    ':do { /certificate sign connectly-api ca=connectly-ca } on-error={ :log info "Connectly: HTTPS certificate already signed" }',
     ':delay 15s',
     `/ip service set www-ssl certificate=connectly-api disabled=no port=443 address=${controllerIp}/32`,
     `:if ([:len [/ip firewall filter find comment="Connectly controller API"]] = 0) do={ /ip firewall filter add chain=input action=accept protocol=tcp dst-port=443 src-address=${controllerIp} in-interface=${WG_INTERFACE} comment="Connectly controller API" }`,
