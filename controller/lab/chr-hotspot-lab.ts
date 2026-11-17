@@ -9,8 +9,6 @@
 //              The Mac's own address on that network acts as the "customer".
 //
 // Run (from this folder):
-//   LAB_CUSTOMER_IP=<Mac's address on the second network> \
-//   LAB_HOTSPOT_CIDR=<router address on it, e.g. 192.168.57.10/24> \
 //   CONTROLLER_TEST_PG=postgres://$USER@127.0.0.1:5432/postgres node lab/chr-hotspot-lab.ts
 //
 // Lab-only differences from the field (each says why):
@@ -38,8 +36,9 @@ import type { JobContext } from '../src/jobs.ts';
 const ROUTER_IP = process.env.LAB_ROUTER_IP ?? '192.168.56.200';
 const HOST_IP = process.env.LAB_HOST_IP ?? '192.168.56.1';
 const HOTSPOT_PORT = process.env.LAB_HOTSPOT_PORT ?? 'ether3';
-const HOTSPOT_CIDR = process.env.LAB_HOTSPOT_CIDR ?? '';
-const CUSTOMER_IP = process.env.LAB_CUSTOMER_IP ?? '';
+const HOTSPOT_CIDR = process.env.LAB_HOTSPOT_CIDR ?? '192.168.57.10/24';
+// The Mac's own address on the customer network, found automatically when not given.
+const CUSTOMER_IP = process.env.LAB_CUSTOMER_IP ?? findLocalAddress(HOTSPOT_CIDR);
 const PORT = 8080;
 const IDENTITY = 'cx-lab-01';
 const PORTAL = 'https://getconnectly.net/portal';
@@ -51,6 +50,13 @@ const record = (step: string, ok: boolean, detail: string) => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function findLocalAddress(cidr: string): string {
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list ?? []) if (a.family === 'IPv4' && !a.internal && sameNetwork(cidr, a.address) && a.address !== cidr.split('/')[0]) return a.address;
+  }
+  return '';
+}
+
 function sameNetwork(cidr: string, ipAddr: string): boolean {
   const [g, p] = cidr.split('/');
   const n = (s: string) => s.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
@@ -60,8 +66,9 @@ function sameNetwork(cidr: string, ipAddr: string): boolean {
 
 async function main() {
   console.log('Connectly controller - CHR hotspot lab\n');
+  console.log(`Router customer side ${HOTSPOT_CIDR} on ${HOTSPOT_PORT}; this Mac as the customer: ${CUSTOMER_IP || 'not found'}\n`);
   if (!/^\d+\.\d+\.\d+\.\d+\/\d+$/.test(HOTSPOT_CIDR) || !/^\d+\.\d+\.\d+\.\d+$/.test(CUSTOMER_IP)) {
-    console.log('Set LAB_HOTSPOT_CIDR (e.g. 192.168.57.10/24) and LAB_CUSTOMER_IP (the Mac\'s address on the second host-only network).');
+    console.log(`This Mac has no address inside ${HOTSPOT_CIDR}. Is the VM running with Adapter 3 on CustomerNet? Or set LAB_CUSTOMER_IP and LAB_HOTSPOT_CIDR yourself.`);
     process.exit(2);
   }
   if (!sameNetwork(HOTSPOT_CIDR, CUSTOMER_IP)) {
