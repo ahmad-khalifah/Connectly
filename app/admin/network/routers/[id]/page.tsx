@@ -120,6 +120,8 @@ export default async function RouterDetailPage({ params }: { params: Promise<{ i
         <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
           <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2"><ListChecks className="h-4 w-4 text-[#6d1825]" /> Recent jobs</h2>
           <Link href={`/admin/network/jobs?router=${r.id}`} className="text-xs font-semibold text-[#6d1825] hover:underline">All jobs for this router</Link>
+          {' · '}
+          <Link href={`/admin/network/access?router=${r.id}`} className="text-xs font-semibold text-[#6d1825] hover:underline">Access grants on this router</Link>
         </div>
         {jobs?.length ? (
           <table className="w-full min-w-[640px] text-left text-sm text-slate-600">

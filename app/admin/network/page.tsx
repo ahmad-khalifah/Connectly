@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Network, Server, Plus, ListChecks, Cpu, AlertTriangle, Radio } from 'lucide-react';
+import { Network, Server, Plus, ListChecks, Cpu, AlertTriangle, Radio, KeyRound } from 'lucide-react';
 import { db } from '@/lib/db/client';
 import { isControllerLive } from '@/lib/network/jobs';
 import { LifecycleBadge, HealthBadge, fmtTime, ago } from './badges';
@@ -17,7 +17,7 @@ export default async function NetworkPage() {
     db.from('routers')
       .select('id, name, identifier, lifecycle_status, status, connection_method, tunnel_ip, last_seen_at, last_test_at, last_test_result, locations(name)')
       .order('created_at', { ascending: false }),
-    db.from('controller_instances').select('id, version, started_at, last_heartbeat_at').order('last_heartbeat_at', { ascending: false }).limit(3),
+    db.from('controller_instances').select('id, version, started_at, last_heartbeat_at, info').order('last_heartbeat_at', { ascending: false }).limit(3),
     db.from('network_settings').select('controller_endpoint, controller_wg_public_key, credential_key_id, tunnel_cidr').maybeSingle(),
     db.from('controller_jobs').select('status'),
     db.from('backhauls').select('id, provider, identifier, status, current_latency_ms, locations(name)').order('provider'),
@@ -40,6 +40,9 @@ export default async function NetworkPage() {
           <p className="text-sm text-slate-500">Routers, the Network Controller and every action it takes on them.</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/admin/network/access" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <KeyRound className="h-4 w-4" /> Access grants
+          </Link>
           <Link href="/admin/network/jobs" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             <ListChecks className="h-4 w-4" /> Controller jobs
           </Link>
@@ -59,6 +62,9 @@ export default async function NetworkPage() {
           {live ? (
             <>
               <p className="mt-2 text-lg font-bold text-emerald-700">Running</p>
+              {(live.info as { production?: boolean; environment?: string } | null)?.production !== true && (
+                <p className="text-xs font-semibold text-amber-700">Test controller ({(live.info as { environment?: string } | null)?.environment ?? 'unknown'}): not for paying customers</p>
+              )}
               <p className="text-xs text-slate-500">{live.id} · v{live.version ?? '?'} · heartbeat {ago(live.last_heartbeat_at)}</p>
             </>
           ) : (

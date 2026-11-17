@@ -302,3 +302,56 @@ describe('job retry and cancel', () => {
     expect(isControllerLive('2026-11-16T23:57:00Z', now)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------- access grants
+describe('POST /api/admin/network/access/[id]/revoke', () => {
+  const GRANT = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const revoke = async (id = GRANT) => {
+    const { POST } = await import('@/app/api/admin/network/access/[id]/revoke/route');
+    return POST(new Request('http://x', { method: 'POST' }), params({ id }));
+  };
+  const grant = (patch: Record<string, unknown> = {}) => ({
+    id: GRANT, router_id: ROUTER, status: 'active', revoked_at: null, expires_at: new Date(Date.now() + 3_600_000).toISOString(), ...patch,
+  });
+
+  it('queues one revoke job with the same key the expiry sweep uses, and records who asked', async () => {
+    fake = createFakeDb(
+      (op) => (op.table === 'network_authorizations' ? { data: grant(), error: null } : { data: null, error: null }),
+      () => ({ data: { job_id: JOB, created: true, status: 'queued' }, error: null }),
+    );
+    const res = await revoke();
+    expect(res.status).toBe(201);
+    expect(fake.rpcCalls).toEqual([{ fn: 'enqueue_job', args: {
+      p_kind: 'access.revoke', p_router_id: ROUTER, p_authorization_id: GRANT, p_payload: { reason: 'admin' },
+      p_idempotency_key: `revoke:${GRANT}`, p_requested_by: 'connectly.hq@outlook.com',
+    } }]);
+    const audit = fake.ops.find((o) => o.table === 'activity_logs' && o.action === 'insert');
+    expect(audit?.values).toMatchObject({ event_type: 'access.revoke_requested', entity_id: GRANT });
+  });
+
+  it('a second request returns the existing job instead of queuing another', async () => {
+    fake = createFakeDb(
+      (op) => (op.table === 'network_authorizations' ? { data: grant(), error: null } : { data: null, error: null }),
+      () => ({ data: { job_id: JOB, created: false, status: 'queued' }, error: null }),
+    );
+    const res = await revoke();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ jobId: JOB, created: false });
+  });
+
+  it.each([
+    ['already revoked', { status: 'revoked', revoked_at: new Date().toISOString() }],
+    ['already expired', { status: 'expired' }],
+  ])('refuses when %s and queues nothing', async (_l, patch) => {
+    fake = createFakeDb((op) => (op.table === 'network_authorizations' ? { data: grant(patch), error: null } : { data: null, error: null }));
+    expect((await revoke()).status).toBe(409);
+    expect(fake.rpcCalls).toHaveLength(0);
+  });
+
+  it('unknown or malformed ids are 404 with nothing queued', async () => {
+    fake = createFakeDb(() => ({ data: null, error: null }));
+    expect((await revoke()).status).toBe(404);
+    expect((await revoke('not-a-uuid')).status).toBe(404);
+    expect(fake.rpcCalls).toHaveLength(0);
+  });
+});
