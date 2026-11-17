@@ -1,0 +1,39 @@
+# systemd unit for the Connectly Network Controller. Same file on a laptop
+# VM, a free cloud VM or a paid VPS. Install with deploy/install.sh.
+[Unit]
+Description=Connectly Network Controller
+After=network-online.target wg-quick@wg-connectly.service
+Wants=network-online.target wg-quick@wg-connectly.service
+
+[Service]
+Type=simple
+User=connectly
+Group=connectly
+WorkingDirectory=/opt/connectly-controller
+# Owner-only file (root:connectly, mode 0640): database URL, CA path, endpoint.
+EnvironmentFile=/etc/connectly-controller/controller.env
+ExecStart=/usr/bin/node src/main.ts
+Restart=always
+RestartSec=5
+TimeoutStopSec=60
+
+# Hardening: no new privileges, read-only system, only its data dir writable.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+StateDirectory=connectly-controller
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/connectly-controller
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

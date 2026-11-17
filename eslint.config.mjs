@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Network Controller is a separate Node service, type-checked by its own tsconfig.
+    "controller/**",
   ]),
 ]);
 

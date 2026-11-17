@@ -1,0 +1,9 @@
+# Re-applies WireGuard peers whenever the controller rewrites its peer list.
+[Unit]
+Description=Apply Connectly router peers to WireGuard
+
+[Path]
+PathChanged=/var/lib/connectly-controller/wg-peers.conf
+
+[Install]
+WantedBy=multi-user.target
