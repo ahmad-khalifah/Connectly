@@ -3,6 +3,8 @@ import { Network, Server, Plus, ListChecks, Cpu, AlertTriangle, Radio, KeyRound 
 import { db } from '@/lib/db/client';
 import { isControllerLive } from '@/lib/network/jobs';
 import { LifecycleBadge, HealthBadge, fmtTime, ago } from './badges';
+import { loadAlerts } from '@/lib/admin/alerts';
+import AlertsPanel from '../components/alerts-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +15,7 @@ type RouterRow = {
 };
 
 export default async function NetworkPage() {
-  const [routersRes, instancesRes, settingsRes, jobsRes, backhaulRes] = await Promise.all([
+  const [routersRes, instancesRes, settingsRes, jobsRes, backhaulRes, alerts] = await Promise.all([
     db.from('routers')
       .select('id, name, identifier, lifecycle_status, status, connection_method, tunnel_ip, last_seen_at, last_test_at, last_test_result, locations(name)')
       .order('created_at', { ascending: false }),
@@ -21,6 +23,7 @@ export default async function NetworkPage() {
     db.from('network_settings').select('controller_endpoint, controller_wg_public_key, credential_key_id, tunnel_cidr').maybeSingle(),
     db.from('controller_jobs').select('status'),
     db.from('backhauls').select('id, provider, identifier, status, current_latency_ms, locations(name)').order('provider'),
+    loadAlerts(),
   ]);
 
   const routers = (routersRes.data ?? []) as RouterRow[];
@@ -94,6 +97,8 @@ export default async function NetworkPage() {
           </p>
         </div>
       </div>
+
+      <AlertsPanel alerts={alerts} quietText="No network problems found." />
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">

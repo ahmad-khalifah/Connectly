@@ -1,3 +1,6 @@
+import Link from 'next/link';
+import { loadAlerts } from '@/lib/admin/alerts';
+import AlertsPanel from './components/alerts-panel';
 import React from 'react';
 import { db } from '@/lib/db/client';
 import { reconcileRecentPending } from '@/lib/payments/ledger';
@@ -30,12 +33,14 @@ export default async function AdminDashboardOverview() {
     revenueData,
     locationsHealth,
     routersHealth,
-    recentEvents
+    recentEvents,
+    alerts
   ] = await Promise.all([
     supabase.from('purchases').select('status, amount_kobo, amount_paid, gateway_fee_ngn, net_amount_ngn, created_at, paid_at, expires_at, phone_number').eq('status', 'paid').order('created_at', { ascending: false }),
     supabase.from('locations').select('id, name, status'),
-    supabase.from('routers').select('id, identifier, status, cpu_usage_pct, wan_status'),
-    supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(8)
+    supabase.from('routers').select('id, name, identifier, status, lifecycle_status, last_seen_at').neq('lifecycle_status', 'retired'),
+    supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(8),
+    loadAlerts()
   ]);
 
   // Financial calculations
@@ -74,6 +79,7 @@ export default async function AdminDashboardOverview() {
 
   return (
     <div className="space-y-6">
+      <AlertsPanel alerts={alerts} quietText="No operational problems found." />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -202,15 +208,15 @@ export default async function AdminDashboardOverview() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-200 bg-slate-50">
             <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-              <Server className="h-4 w-4 text-[#cfa253]" /> Edge Node Heartbeats
+              <Server className="h-4 w-4 text-[#cfa253]" /> Routers
             </h3>
           </div>
           <div className="divide-y divide-slate-100 p-2 overflow-y-auto max-h-[360px]">
             {routersHealth.data?.map(router => (
               <div key={router.id} className="p-3 flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-semibold text-slate-800">{router.identifier}</p>
-                  <p className="text-[11px] text-slate-400 font-mono">CPU Load: {router.cpu_usage_pct}%</p>
+                  <Link href={`/admin/network/routers/${router.id}`} className="font-semibold text-slate-800 hover:text-[#6d1825]">{router.name ?? router.identifier}</Link>
+                  <p className="text-[11px] text-slate-400">{router.lifecycle_status} · last seen {router.last_seen_at ? new Date(router.last_seen_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'short', timeStyle: 'short' }) : 'never'}</p>
                 </div>
                 <div className="text-right">
                   <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
@@ -218,13 +224,13 @@ export default async function AdminDashboardOverview() {
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                       : 'bg-red-50 text-red-700 border border-red-200'
                   }`}>
-                    {router.status}
+                    {router.status ?? 'unknown'}
                   </span>
                 </div>
               </div>
             ))}
             {(!routersHealth.data || routersHealth.data.length === 0) && (
-              <p className="p-6 text-center text-xs text-slate-400">No hardware nodes discovered.</p>
+              <p className="p-6 text-center text-xs text-slate-400">No routers registered yet.</p>
             )}
           </div>
         </div>

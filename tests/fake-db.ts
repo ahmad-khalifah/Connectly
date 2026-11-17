@@ -27,6 +27,7 @@ export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<st
       in(col: string, vals: unknown[]) { op.filters.push([`${col} in`, vals]); return chain; },
       is(col: string, val: unknown) { op.filters.push([`${col} is`, val]); return chain; },
       gt(col: string, val: unknown) { op.filters.push([`${col}>`, val]); return chain; },
+      neq(col: string, val: unknown) { op.filters.push([`${col}!=`, val]); return chain; },
       lte(col: string, val: unknown) { op.filters.push([`${col}<=`, val]); return chain; },
       order() { return chain; },
       limit(n: number) { op.filters.push(['limit', n]); return chain; },

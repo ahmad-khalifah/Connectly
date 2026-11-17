@@ -48,6 +48,11 @@ export function describeNetwork(gatewayCidr: string): string | null {
   return `${size.toLocaleString('en-NG')} customer devices at once`;
 }
 
+/** A walled-garden host: pay.example.com or *.example.com. */
+export function isWalledGardenHost(h: string): boolean {
+  return HOST.test(h) && h.length <= 253;
+}
+
 export function parseHotspotInput(raw: unknown): { ok: true; value: HotspotInput } | { ok: false; errors: Record<string, string> } {
   const b = (raw ?? {}) as Record<string, unknown>;
   const errors: Record<string, string> = {};
