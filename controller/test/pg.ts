@@ -7,9 +7,9 @@
 // postgres://postgres:<pw>@127.0.0.1:5432/postgres (see controller/README.md).
 // Never point it at Supabase.
 //
-// Local servers here run PostgreSQL 16; Supabase runs 17. The only 17-only
-// syntax in the migrations is the MAINTAIN privilege in revokes from browser
-// roles, so that one word is removed for local runs. Nothing else is changed.
+// Supabase runs PostgreSQL 17. On an older local server (16), the only
+// 17-only syntax in the migrations, the MAINTAIN privilege in revokes from
+// browser roles, is removed. On 17 the migrations run exactly as written.
 
 import pg from 'pg';
 import fs from 'node:fs';
@@ -59,8 +59,10 @@ export async function freshDb(): Promise<TestDb> {
   await admin.query(`insert into locations (id, name, slug) values ('${LOC}', 'Test Hostel', 'test-hostel');
     insert into plans (id, name, price_kobo, duration_seconds, speed_down_mbps, speed_up_mbps, device_limit)
       values ('${PLAN}', 'Test 2 Hour', 30000, 7200, 10, 3, 1);`);
+  const pg17 = Number((await admin.query('show server_version_num')).rows[0].server_version_num) >= 170000;
   for (const m of fs.readdirSync(path.join(ROOT, 'migrations')).filter((f) => f.endsWith('.sql')).sort()) {
-    const sql = fs.readFileSync(path.join(ROOT, 'migrations', m), 'utf8').replace(/,\s*maintain\b/gi, '');
+    const raw = fs.readFileSync(path.join(ROOT, 'migrations', m), 'utf8');
+    const sql = pg17 ? raw : raw.replace(/,\s*maintain\b/gi, '');
     await admin.query(sql);
   }
 
