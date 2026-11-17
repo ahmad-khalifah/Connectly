@@ -20,6 +20,9 @@ export type WorkerOptions = {
   healthIntervalMs: number;
   reconcileIntervalMs: number;
   wgPeersFile?: string | null;
+  appTick?: { url: string; secret: string; intervalMs: number } | null;
+  /** Injected in tests. */
+  fetchFn?: typeof fetch;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -118,6 +121,28 @@ export class Controller {
     }
   }
 
+  /**
+   * Calls the app's timed endpoint (expiry reminders). The app does the work
+   * and holds the SMS key; the controller only keeps time. Never throws.
+   */
+  async appTick(): Promise<number | null> {
+    const t = this.o.appTick;
+    if (!t) return null;
+    try {
+      const res = await (this.o.fetchFn ?? fetch)(t.url, { headers: { authorization: `Bearer ${t.secret}` }, signal: AbortSignal.timeout(30_000) });
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (res.ok) {
+        if (Number(body.sent) > 0 || Number(body.failed) > 0) this.log.info('app_tick.done', { sent: body.sent, failed: body.failed });
+      } else {
+        this.log.warn('app_tick.failed', { status: res.status });
+      }
+      return res.status;
+    } catch (e) {
+      this.log.warn('app_tick.unreachable', { error: e });
+      return null;
+    }
+  }
+
   private every(ms: number, name: string, fn: () => Promise<unknown>) {
     const tick = () => fn().catch((e) => this.log.error(`${name}.error`, { error: e }));
     this.timers.push(setInterval(tick, ms));
@@ -138,6 +163,7 @@ export class Controller {
     for (let i = 0; i < this.o.concurrency; i++) this.loops.push(this.jobLoop(i));
     this.every(this.o.healthIntervalMs, 'health', () => this.health.pollAll());
     void this.every(this.o.reconcileIntervalMs, 'reconcile', () => this.reconcileAll())();
+    if (this.o.appTick) void this.every(this.o.appTick.intervalMs, 'app_tick', () => this.appTick())();
     this.log.info('controller.started', { worker: this.o.workerId, environment: this.o.environment, concurrency: this.o.concurrency });
   }
 

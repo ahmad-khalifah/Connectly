@@ -131,3 +131,42 @@ test('hotspot plan: pool skips network, gateway and broadcast; walled garden mer
   assert.equal(q.poolRange, '192.168.50.1-192.168.50.253', 'gateway at the top: pool below it');
   assert.deepEqual(q.walledGarden, ['x.example.com'], 'the payment page host is always reachable');
 });
+
+test('app tick: optional, https outside local, secret from a file of 32+ characters', () => {
+  const base = { CONTROLLER_ENV: 'local', DATABASE_URL: 'postgres://u@127.0.0.1/db' };
+  assert.equal(loadConfig(base).appTick, null);
+  const secret = 's'.repeat(40);
+  const files = (p: string) => (p === '/s' ? `${secret}\n` : p === '/short' ? 'abc' : '');
+  const ok = loadConfig({ ...base, APP_TICK_URL: 'http://localhost:3000/api/cron/sms-reminders', APP_TICK_SECRET_FILE: '/s' }, files);
+  assert.deepEqual(ok.appTick, { url: 'http://localhost:3000/api/cron/sms-reminders', secret, intervalMs: 600_000 });
+  assert.throws(() => loadConfig({ ...base, APP_TICK_URL: 'https://x.example/t' }, files), /APP_TICK_SECRET_FILE is required/);
+  assert.throws(() => loadConfig({ ...base, APP_TICK_URL: 'https://x.example/t', APP_TICK_SECRET_FILE: '/short' }, files), /at least 32/);
+  const staging = { CONTROLLER_ENV: 'staging', DATABASE_URL: 'postgres://u@db.example/db', DATABASE_CA_FILE: '/ca' };
+  assert.throws(() => loadConfig({ ...staging, APP_TICK_URL: 'http://x.example/t', APP_TICK_SECRET_FILE: '/s' }, (p) => (p === '/ca' ? 'PEM' : files(p))), /must use https/);
+});
+
+test('app tick: calls the app with the bearer secret, logs failures, never throws', async () => {
+  const { Controller } = await import('../src/worker.ts');
+  const lines: string[] = [];
+  const log = createLogger((l) => lines.push(l));
+  const calls: { url: string; auth: string | null }[] = [];
+  let reply: () => Promise<Response> = async () => new Response(JSON.stringify({ sent: 2, failed: 0 }), { status: 200 });
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    calls.push({ url, auth: new Headers(init.headers).get('authorization') });
+    return reply();
+  }) as unknown as typeof fetch;
+  const secret = 'k'.repeat(40);
+  const c = new Controller({ db: {}, log } as never, {
+    workerId: 'w', version: 't', environment: 'local', concurrency: 1, pollIntervalMs: 1000, heartbeatIntervalMs: 1000,
+    sweepIntervalMs: 1000, healthIntervalMs: 1000, reconcileIntervalMs: 1000,
+    appTick: { url: 'https://app.example/api/cron/sms-reminders', secret, intervalMs: 600_000 }, fetchFn,
+  });
+  assert.equal(await c.appTick(), 200);
+  assert.deepEqual(calls[0], { url: 'https://app.example/api/cron/sms-reminders', auth: `Bearer ${secret}` });
+  reply = async () => new Response('', { status: 401 });
+  assert.equal(await c.appTick(), 401);
+  reply = async () => { throw new Error('ENOTFOUND'); };
+  assert.equal(await c.appTick(), null);
+  assert.ok(lines.some((l) => l.includes('app_tick.failed')) && lines.some((l) => l.includes('app_tick.unreachable')));
+  assert.ok(!lines.join('').includes(secret), 'the secret never reaches the log');
+});

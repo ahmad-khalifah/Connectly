@@ -51,6 +51,7 @@ All settings come from environment variables; see `deploy/controller.env.example
 - Outside `local`, the database certificate must be verified (`DATABASE_CA_FILE`), and the login must be `connectly_controller`.
 - If the database already holds a different credential key, start-up stops rather than making every router credential unreadable.
 - The key file and data directory must be owner-only.
+- `APP_TICK_URL` (optional) must be https outside `local`, and its secret file must hold at least 32 characters. The controller only keeps time; the app sends the reminders.
 
 ## Moving hosts
 

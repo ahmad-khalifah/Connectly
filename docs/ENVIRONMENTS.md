@@ -35,7 +35,6 @@ Set each variable separately for **Production** and **Preview** in Vercel → Pr
 | `KORA_SECRET_KEY` | live key at go-live | sandbox `sk_test_…` |
 | `TERMII_API_KEY`, `TERMII_SENDER_ID`, `TERMII_BASE_URL`, `TERMII_CHANNEL` | production values | same, or unset to skip SMS |
 | `CRON_SECRET` | random, 32+ chars | different random value |
-| `NODE_HEARTBEAT_SECRET` | random, 32+ chars | different random value |
 
 Never paste keys into chat, issues or commits. Rotate any key that was.
 

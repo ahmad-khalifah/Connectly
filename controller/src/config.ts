@@ -36,6 +36,8 @@ export type Config = {
   routerTimeoutMs: number;
   /** Allow replacing a different credential key already published (makes old router credentials unreadable). */
   replaceCredentialKey: boolean;
+  /** App endpoint the controller calls on a timer (expiry reminders), with its bearer secret. */
+  appTick: { url: string; secret: string; intervalMs: number } | null;
 };
 
 export class ConfigError extends Error {}
@@ -85,6 +87,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, readFile: (p: s
   const endpointRaw = env.CONTROLLER_ENDPOINT ?? '';
   if (endpointRaw) hostPort(endpointRaw, 'CONTROLLER_ENDPOINT');
 
+  let appTick: Config['appTick'] = null;
+  if (env.APP_TICK_URL) {
+    let u: URL;
+    try { u = new URL(env.APP_TICK_URL); } catch { throw new ConfigError('APP_TICK_URL must be a full URL.'); }
+    if (u.protocol !== 'https:' && environment !== 'local') throw new ConfigError('APP_TICK_URL must use https outside local development.');
+    if (!env.APP_TICK_SECRET_FILE) throw new ConfigError('APP_TICK_SECRET_FILE is required with APP_TICK_URL.');
+    const secret = readFile(env.APP_TICK_SECRET_FILE).trim();
+    if (secret.length < 32) throw new ConfigError('The secret in APP_TICK_SECRET_FILE must be at least 32 characters.');
+    appTick = { url: u.toString(), secret, intervalMs: int(env, 'APP_TICK_INTERVAL_MS', 600_000, 60_000, 3_600_000) };
+  }
+
   return {
     environment,
     version: env.CONTROLLER_VERSION || '0.1.0',
@@ -103,5 +116,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, readFile: (p: s
     reconcileIntervalMs: int(env, 'RECONCILE_INTERVAL_MS', 900_000, 1000, 86_400_000),
     routerTimeoutMs: int(env, 'ROUTER_TIMEOUT_MS', 15_000, 1000, 60_000),
     replaceCredentialKey: env.CONTROLLER_REPLACE_CREDENTIAL_KEY === 'yes',
+    appTick,
   };
 }
