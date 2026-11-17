@@ -66,17 +66,28 @@ async function main() {
   const router = (await db.getRouter(routerId))!;
 
   // ---------------------------------------------------------------- bootstrap
+  // The served file ends by calling /done, so the lab tests only after the
+  // router has applied everything (a fixed wait raced the operator's typing).
   let served = false;
+  let applied = false;
   const server = http.createServer((req, res) => {
     const from = (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
-    if (req.method !== 'GET' || req.url !== '/b' || from !== ROUTER_IP) {
+    if (req.method !== 'GET' || from !== ROUTER_IP || (req.url !== '/b' && req.url !== '/done')) {
       res.writeHead(404).end('not found\n');
       return;
     }
-    const script = `/system identity set name="${IDENTITY}"\n` + bootstrapScript(router, password, HOST_IP).replace('in-interface=wg-connectly', 'in-interface=ether2');
+    if (req.url === '/done') {
+      applied = true;
+      res.writeHead(200, { 'content-type': 'text/plain' }).end('ok\n');
+      console.log('      The router finished applying it.');
+      return;
+    }
+    const script = `/system identity set name="${IDENTITY}"\n`
+      + bootstrapScript(router, password, HOST_IP).replace('in-interface=wg-connectly', 'in-interface=ether2')
+      + `\n/tool fetch url="http://${HOST_IP}:${PORT}/done" output=none`;
     res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }).end(script + '\n');
     served = true;
-    console.log('\n      The router fetched its set-up file.');
+    console.log('\n      The router fetched its set-up file. Now type the /import line.');
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -88,15 +99,16 @@ async function main() {
   console.log('  /import cx.rsc');
   console.log('  /file remove cx.rsc\n');
   console.log('Waiting for the router (up to 15 minutes)...');
-  for (let i = 0; i < 900 && !served; i++) await sleep(1000);
+  for (let i = 0; i < 900 && !applied; i++) await sleep(1000);
   server.close();
   if (!served) {
     record('Router fetched its set-up file', false, 'Nothing arrived from the router within 15 minutes.');
     return finish(t, pool);
   }
-  record('Router fetched its set-up file', true, `Served only to ${ROUTER_IP} on ${HOST_IP}:${PORT}; the password was never printed or logged.`);
-  console.log('\nGiving the router 30 seconds to make its certificate and start HTTPS...');
-  await sleep(30_000);
+  record('Router fetched and applied its set-up file', applied,
+    applied ? `Served only to ${ROUTER_IP} on ${HOST_IP}:${PORT}; the password was never printed or logged.` : 'Fetched, but the import did not finish within 15 minutes (check the MikroTik window for an error).');
+  if (!applied) return finish(t, pool);
+  await sleep(3000);
 
   // ---------------------------------------------------------------- test
   const enqueue = async (kind: string) =>
