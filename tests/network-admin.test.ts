@@ -251,6 +251,9 @@ describe('engineer setup script', () => {
     expect(s.ready).toBe(true);
     expect(s.script).toContain('endpoint-address=ctrl.getconnectly.net endpoint-port=51820 allowed-address=10.77.0.1/32');
     expect(s.script).toContain('/ip address add address=10.77.0.2/22 interface=wg-connectly');
+    // Safe to re-run: existing peer and address are updated, not duplicated (found in the CHR lab).
+    expect(s.script).toMatch(/:if \(\[:len \[\/interface wireguard peers find comment="Connectly controller"\]\] = 0\) do=\{ \/interface wireguard peers add .* \} else=\{ \/interface wireguard peers set /);
+    expect(s.script).toMatch(/else=\{ \/ip address set \[find comment="Connectly tunnel"\] address=10\.77\.0\.2\/22/);
     expect(s.script).toContain(`/bootstrap/${ROUTER}`);
     expect(s.script).toContain('Garki \\"main\\"'); // RouterOS escaping
     expect(s.script).not.toMatch(/password=|private-key=/);

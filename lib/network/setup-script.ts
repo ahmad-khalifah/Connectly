@@ -5,7 +5,8 @@
 // garden) from the controller through that encrypted tunnel. The controller
 // answers only the tunnel address assigned to this router.
 //
-// STATUS: untested on RouterOS until the virtual MikroTik (CHR) phase.
+// STATUS: run on MikroTik CHR 7.25.1 in the lab (17 Nov 2026); re-runs made safe
+// after the lab showed a second run failing on the existing peer.
 
 export type SetupInputs = {
   router: { id: string; name: string; identifier: string; connection_method: string; tunnel_ip: string | null; wg_public_key: string | null };
@@ -44,10 +45,9 @@ export function buildSetupScript({ router, settings }: SetupInputs): SetupScript
     '',
     `# 2. Tunnel to the Connectly controller. The ${WG_INTERFACE} interface was`,
     '#    created before registration, to read its public key.',
-    `/interface wireguard peers add interface=${WG_INTERFACE} public-key="${ros(settings.controller_wg_public_key ?? '<controller-public-key>')}" \\`,
-    `    endpoint-address=${host} endpoint-port=${port ?? '<port>'} allowed-address=${controllerIp}/32 \\`,
-    '    persistent-keepalive=25s comment="Connectly controller"',
-    `/ip address add address=${router.tunnel_ip ?? '<tunnel-ip>'}/${prefix} interface=${WG_INTERFACE} comment="Connectly tunnel"`,
+    '#    Safe to run again: an existing Connectly peer and address are updated.',
+    `:if ([:len [/interface wireguard peers find comment="Connectly controller"]] = 0) do={ /interface wireguard peers add interface=${WG_INTERFACE} public-key="${ros(settings.controller_wg_public_key ?? '<controller-public-key>')}" endpoint-address=${host} endpoint-port=${port ?? '<port>'} allowed-address=${controllerIp}/32 persistent-keepalive=25s comment="Connectly controller" } else={ /interface wireguard peers set [find comment="Connectly controller"] interface=${WG_INTERFACE} public-key="${ros(settings.controller_wg_public_key ?? '<controller-public-key>')}" endpoint-address=${host} endpoint-port=${port ?? '<port>'} allowed-address=${controllerIp}/32 persistent-keepalive=25s }`,
+    `:if ([:len [/ip address find comment="Connectly tunnel"]] = 0) do={ /ip address add address=${router.tunnel_ip ?? '<tunnel-ip>'}/${prefix} interface=${WG_INTERFACE} comment="Connectly tunnel" } else={ /ip address set [find comment="Connectly tunnel"] address=${router.tunnel_ip ?? '<tunnel-ip>'}/${prefix} interface=${WG_INTERFACE} }`,
     '',
     '# 3. Fetch and apply the rest of the configuration from the controller',
     '#    (API user and password, certificate, firewall, hotspot, walled garden).',

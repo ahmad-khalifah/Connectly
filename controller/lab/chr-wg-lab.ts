@@ -19,7 +19,8 @@
 // engineer copying it into the dashboard.
 //
 // Needs ../../lab-wg.json = {"macPublicKey": "<the Mac WireGuard app's public key>"}.
-// Run (from controller/): node lab/chr-wg-lab.ts
+// Run (from controller/):
+//   LAB_HOST_IP=<Mac Wi-Fi address> LAB_ROUTER_IP=<router ether2 address> node lab/chr-wg-lab.ts
 
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -139,16 +140,21 @@ async function main() {
   record('Router registered; the database assigned its tunnel address', /^10\.77\./.test(tunnelIp), `tunnel address ${tunnelIp}`);
 
   const peerFile = path.join(LAB_DIR, 'lab-wg-peer.txt');
-  fs.writeFileSync(peerFile, `[Peer]\nPublicKey = ${routerKey}\nAllowedIPs = ${tunnelIp}/32\n`);
+  // Lab-only: the Mac also dials the router (Endpoint + keepalive), because the
+  // macOS WireGuard app sends only through the main network interface. In the
+  // field the router dials the controller's public address instead.
+  fs.writeFileSync(peerFile, `[Peer]\nPublicKey = ${routerKey}\nAllowedIPs = ${tunnelIp}/32\nEndpoint = ${ROUTER_LAN}:13231\nPersistentKeepalive = 25\n`);
   console.log(`\nSTEP 2. Claude now adds the router to the WireGuard app on this Mac and turns the tunnel on.`);
   console.log(`        (Peer written to ${path.basename(peerFile)}; it holds public keys only.)`);
   console.log('Waiting for the Mac\'s tunnel address 10.77.0.1 (up to 15 minutes)...');
 
   // ------------------------------------------------ real bootstrap endpoint on the tunnel
-  const bootstrap = http.createServer(createBootstrapHandler({ db, keys, log, controllerIp: async () => HUB }));
+  const handler = createBootstrapHandler({ db, keys, log, controllerIp: async () => HUB });
+  let bootstrap: http.Server | null = null;
   const listening = await waitFor(() => new Promise<boolean>((resolve) => {
-    bootstrap.once('error', () => resolve(false));
-    bootstrap.listen(PORT, HUB, () => resolve(true));
+    const s = http.createServer(handler);
+    s.once('error', () => { s.close(); resolve(false); });
+    s.listen(PORT, HUB, () => { bootstrap = s; resolve(true); });
   }), 900);
   if (!listening) {
     record('Mac tunnel up at 10.77.0.1', false, 'The tunnel address never appeared on this Mac.');
@@ -228,7 +234,7 @@ async function main() {
   });
   record('Bootstrap refuses anyone but the router\'s tunnel address', wrongSource === 404, `request from ${HUB} got ${wrongSource}`);
 
-  bootstrap.close();
+  (bootstrap as http.Server | null)?.close();
   return finish(t, pool);
 }
 
