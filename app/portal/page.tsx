@@ -27,7 +27,7 @@ export default async function PortalPage({
     .from('devices')
     .select('id')
     .eq('mac_address', mac)
-    .single();
+    .maybeSingle();
 
   if (device) {
     const { data: activeAuth } = await db
@@ -36,7 +36,9 @@ export default async function PortalPage({
       .eq('device_id', device.id)
       .eq('status', 'active')
       .gt('expires_at', new Date().toISOString())
-      .single();
+      .order('expires_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (activeAuth) {
       return (
@@ -87,7 +89,7 @@ export default async function PortalPage({
   // 3. Fetch active plans
   const { data: plans } = await db
     .from('plans')
-    .select('id, name, price_kobo, download_limit_kbps')
+    .select('id, name, price_kobo, speed_down_mbps, duration_seconds, device_limit')
     .eq('is_active', true)
     .or(`allowed_location_ids.is.null,allowed_location_ids.cs.{${location.id}}`)
     .order('price_kobo', { ascending: true });

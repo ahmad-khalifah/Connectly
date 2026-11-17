@@ -8,7 +8,18 @@ interface Plan {
   id: string;
   name: string;
   price_kobo: number;
-  download_limit_kbps: number | null;
+  speed_down_mbps: number | null;
+  duration_seconds: number | null;
+  device_limit: number | null;
+}
+
+/** "1 day", "3 hours", "30 minutes". */
+function fmtDuration(sec: number | null): string | null {
+  if (!sec || sec <= 0) return null;
+  const unit = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (sec % 86400 === 0) return unit(sec / 86400, 'day');
+  if (sec % 3600 === 0) return unit(sec / 3600, 'hour');
+  return unit(Math.round(sec / 60), 'minute');
 }
 
 interface Location {
@@ -110,7 +121,12 @@ export default function PortalClient({ mac, ip, routerId, location, plans }: Por
                       onChange={(e) => setSelectedPlanId(e.target.value)}
                       className="text-[#6d1825] focus:ring-[#6d1825]"
                     />
-                    <span className="font-medium text-gray-900">{plan.name}</span>
+                    <span>
+                      <span className="block font-medium text-gray-900">{plan.name}</span>
+                      <span className="block text-xs text-gray-500">
+                        {[fmtDuration(plan.duration_seconds), plan.speed_down_mbps ? `up to ${plan.speed_down_mbps} Mbps` : null, (plan.device_limit ?? 1) > 1 ? `${plan.device_limit} devices` : null].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
                   </div>
                   <span className="font-bold text-gray-900">₦{plan.price_kobo / 100}</span>
                 </label>

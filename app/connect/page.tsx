@@ -41,9 +41,20 @@ export default async function ConnectPage({
     );
   }
 
+  // Plans are bought from the WiFi login page, which identifies the router.
+  // A location link alone cannot grant access, so it does not sell.
+  if (!routerIdStr) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
+        <h1 className="text-2xl font-bold text-gray-900">Connectly WiFi at {locationData.name}</h1>
+        <p className="mt-2 max-w-sm text-gray-600">Join the Connectly WiFi network on your phone. The login page opens and you can buy a plan there.</p>
+      </main>
+    );
+  }
+
   // 2. Check existing authorization (Only possible if MAC is provided)
   if (mac) {
-    const { data: device } = await db.from('devices').select('id').eq('mac_address', mac).single();
+    const { data: device } = await db.from('devices').select('id').eq('mac_address', mac).maybeSingle();
 
     if (device) {
       const { data: activeAuth } = await db
@@ -52,7 +63,8 @@ export default async function ConnectPage({
         .eq('device_id', device.id)
         .eq('status', 'active')
         .gt('expires_at', new Date().toISOString())
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (activeAuth) {
         return (
@@ -71,7 +83,7 @@ export default async function ConnectPage({
   // 3. Fetch active plans
   const { data: plans } = await db
     .from('plans')
-    .select('id, name, price_kobo, download_limit_kbps')
+    .select('id, name, price_kobo, speed_down_mbps, duration_seconds, device_limit')
     .eq('is_active', true)
     .or(`allowed_location_ids.is.null,allowed_location_ids.cs.{${locationData.id}}`)
     .order('price_kobo', { ascending: true });

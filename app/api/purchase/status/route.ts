@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { reconcilePurchase } from '@/lib/payments/ledger';
+import { accessForPurchase, connectLink } from '@/lib/network/customer-access';
 
 // Payment status for the customer's return page, looked up by the payment
-// reference (an unguessable UUID). Returns no personal data.
+// reference (an unguessable UUID). Returns no personal data. Once paid it
+// returns the voucher: the reference is the customer's receipt, and they
+// need the voucher to log in (it is also sent to their phone).
 //
 // With ?check=1, a still-pending purchase is re-checked with Korapay's
 // verify API, which Korapay documents as the expected step after a
@@ -22,7 +25,7 @@ export async function GET(request: Request) {
   const load = () =>
     db
       .from('purchases')
-      .select('status, created_at, expires_at, amount_kobo, plans(name), locations(name)')
+      .select('id, router_id, status, created_at, expires_at, amount_kobo, plans(name), locations(name)')
       .eq('reference', reference)
       .maybeSingle();
 
@@ -50,7 +53,14 @@ export async function GET(request: Request) {
       locationName: location?.name ?? null,
       amountNaira: p.amount_kobo ? p.amount_kobo / 100 : null,
       expiresAt: p.expires_at,
+      access: p.status === 'paid' ? await accessView(p.id, p.router_id) : null,
     },
     { headers: { 'Cache-Control': 'no-store' } }
   );
+}
+
+async function accessView(purchaseId: string, routerId: string | null) {
+  const a = await accessForPurchase(purchaseId, routerId);
+  if (!a) return null;
+  return { voucher: a.voucher, ready: a.ready, ended: a.ended, devices: a.devices, connectUrl: connectLink(a.loginUrl, a.voucher) };
 }
