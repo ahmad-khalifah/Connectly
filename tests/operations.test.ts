@@ -11,7 +11,7 @@ vi.mock('@/lib/auth/admin', () => ({
 
 const GRANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ROUTER = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
-const params = (o: Record<string, string>) => ({ params: Promise.resolve(o) });
+const params = <T extends Record<string, string>>(o: T) => ({ params: Promise.resolve(o) });
 
 beforeEach(() => {
   vi.resetModules();
