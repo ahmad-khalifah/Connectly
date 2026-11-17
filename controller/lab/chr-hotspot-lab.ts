@@ -192,12 +192,13 @@ async function main() {
     `created ${created.length}, updated ${(again.result?.updated ?? []).length}, removed ${(again.result?.removed ?? []).length}`);
 
   // ---------------------------------------------------------------- change settings -> new version
+  const before = (await t.admin.query('select version from router_hotspot_settings where router_id = $1', [routerId])).rows[0].version as number;
   await t.admin.query(`update router_hotspot_settings set extra_walled_garden = array['*.paystack.co'] where router_id = $1`, [routerId]);
   const v2 = await runJob('router.configure_hotspot');
   const wg2 = (await live.list('/ip/hotspot/walled-garden')).filter((w) => w.comment === 'connectly').map((w) => w['dst-host']);
   const hs2 = (await t.admin.query('select version, applied_version from router_hotspot_settings where router_id = $1', [routerId])).rows[0];
-  record('A settings change reaches the router as a new version', v2.status === 'succeeded' && hs2.version === 2 && hs2.applied_version === 2 && wg2.includes('*.paystack.co'),
-    `v${hs2.version} saved, v${hs2.applied_version} applied; walled garden now ${wg2.sort().join(', ')}`);
+  record('A settings change reaches the router as a new version', v2.status === 'succeeded' && hs2.version === before + 1 && hs2.applied_version === hs2.version && wg2.includes('*.paystack.co'),
+    `v${before} -> v${hs2.version} saved, v${hs2.applied_version} applied; walled garden now ${wg2.sort().join(', ')}`);
 
   // ---------------------------------------------------------------- the customer's journey on the router
   await t.admin.query(`update routers set lifecycle_status = 'active', activated_at = now() where id = $1`, [routerId]);
