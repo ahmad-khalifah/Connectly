@@ -48,6 +48,13 @@ export interface RouterClient {
   ensureUserProfile(p: { name: string; rateLimit: string; sharedUsers: number }): Promise<void>;
   listActive(user?: string): Promise<ActiveSession[]>;
   removeActive(id: string): Promise<void>;
+  /** Generic RouterOS menu access (paths like "/ip/pool"), for configuration jobs. */
+  list(path: string, query?: Record<string, string>): Promise<Record<string, string>[]>;
+  add(path: string, fields: Record<string, string>): Promise<string>;
+  set(path: string, id: string, fields: Record<string, string>): Promise<void>;
+  remove(path: string, id: string): Promise<void>;
+  /** Runs a menu command, e.g. ("/ip/dns/set", {...}). */
+  command(path: string, fields: Record<string, string>): Promise<unknown>;
 }
 
 export type RouterTarget = { host: string; port: number; user: string; password: string; pinnedFingerprint: string | null; timeoutMs: number };
@@ -206,6 +213,31 @@ export class RestRouterClient implements RouterClient {
   async listActive(user?: string): Promise<ActiveSession[]> {
     const rows = await this.request<Record<string, string>[]>('GET', `/ip/hotspot/active${user ? `?user=${encodeURIComponent(user)}` : ''}`);
     return rows.map((r) => ({ id: r['.id']!, user: r.user!, address: r.address, macAddress: r['mac-address'], uptime: r.uptime }));
+  }
+
+  async list(path: string, query: Record<string, string> = {}): Promise<Record<string, string>[]> {
+    const q = new URLSearchParams(query).toString();
+    return this.request<Record<string, string>[]>('GET', `${path}${q ? `?${q}` : ''}`);
+  }
+
+  async add(path: string, fields: Record<string, string>): Promise<string> {
+    return (await this.request<Record<string, string>>('PUT', path, fields))['.id']!;
+  }
+
+  async set(path: string, id: string, fields: Record<string, string>): Promise<void> {
+    await this.request('PATCH', `${path}/${encodeURIComponent(id)}`, fields);
+  }
+
+  async remove(path: string, id: string): Promise<void> {
+    try {
+      await this.request('DELETE', `${path}/${encodeURIComponent(id)}`);
+    } catch (e) {
+      if (!(e instanceof RouterError && e.kind === 'not_found')) throw e;
+    }
+  }
+
+  async command(path: string, fields: Record<string, string>): Promise<unknown> {
+    return this.request('POST', path, fields);
   }
 
   async removeActive(id: string): Promise<void> {

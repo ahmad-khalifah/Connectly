@@ -21,6 +21,11 @@ export class FakeRouter {
   profiles = new Map<string, { rateLimit: string; sharedUsers: number }>();
   active = new Map<string, ActiveSession>();
   calls: string[] = [];
+  /** Generic RouterOS menus, keyed by REST path. */
+  menus = new Map<string, Record<string, string>[]>([
+    ['/interface', [{ '.id': '*I1', name: 'ether1' }, { '.id': '*I2', name: 'ether2' }, { '.id': '*I3', name: 'ether3' }]],
+  ]);
+  dns: Record<string, string> = { 'allow-remote-requests': 'false' };
   private seq = 0;
   constructor(identity: string, password: string) {
     this.identity = identity;
@@ -71,6 +76,42 @@ class FakeClient implements RouterClient {
   async ensureUserProfile(p: { name: string; rateLimit: string; sharedUsers: number }) { this.call('ensureProfile'); this.r.profiles.set(p.name, { rateLimit: p.rateLimit, sharedUsers: p.sharedUsers }); }
   async listActive(user?: string) { this.call('listActive'); return [...this.r.active.values()].filter((s) => !user || s.user === user); }
   async removeActive(id: string) { this.call('removeActive'); this.r.active.delete(id); }
+  private menu(path: string) {
+    if (!this.r.menus.has(path)) this.r.menus.set(path, []);
+    return this.r.menus.get(path)!;
+  }
+  async list(path: string, query: Record<string, string> = {}) {
+    this.call(`list ${path}`);
+    if (path === '/ip/dns') return this.r.dns as unknown as Record<string, string>[];
+    return this.menu(path).filter((row) => Object.entries(query).every(([k, v]) => row[k] === v)).map((row) => ({ ...row }));
+  }
+  async add(path: string, fields: Record<string, string>) {
+    this.call(`add ${path}`);
+    const id = this.r.nextId();
+    this.menu(path).push({ '.id': id, ...fields });
+    // Like RouterOS: creating a hotspot server writes the default hotspot files.
+    if (path === '/ip/hotspot' && !this.menu('/file').some((f) => f.name === 'hotspot/login.html')) {
+      this.menu('/file').push({ '.id': this.r.nextId(), name: 'hotspot/login.html', contents: '<html>MikroTik default</html>' });
+    }
+    return id;
+  }
+  async set(path: string, id: string, fields: Record<string, string>) {
+    this.call(`set ${path}`);
+    const row = this.menu(path).find((r) => r['.id'] === id);
+    if (!row) throw new RouterError('not_found', 'no such item', 404);
+    Object.assign(row, fields);
+  }
+  async remove(path: string, id: string) {
+    this.call(`remove ${path}`);
+    const m = this.menu(path);
+    const i = m.findIndex((r) => r['.id'] === id);
+    if (i >= 0) m.splice(i, 1);
+  }
+  async command(path: string, fields: Record<string, string>) {
+    this.call(`command ${path}`);
+    if (path === '/ip/dns/set') Object.assign(this.r.dns, fields);
+    return {};
+  }
 }
 
 /** Self-signed certificate made with the openssl CLI (test only). */

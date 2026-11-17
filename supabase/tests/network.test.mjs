@@ -47,14 +47,14 @@ test('existing rows survive; settings row created; new routers default to offlin
 
 test('rollback restores the exact post-ledger schema and keeps purchases', async () => {
   const before = await fingerprint(await freshDb({ upTo: '20261117090000_payment_ledger.sql' }));
-  const db = await freshDb();
+  const db = await freshDb({ upTo: '20261118090000_network_management.sql' });
   await db.exec(fs.readFileSync(path.resolve(import.meta.dirname, '../rollbacks/20261118090000_network_management.rollback.sql'), 'utf8'));
   assert.equal(await fingerprint(db), before);
   assert.equal(await count(db, `select count(*) n from purchases`), 2);
 });
 
 test('rollback refuses to run while routers lack the old required columns', async () => {
-  const db = await freshDb();
+  const db = await freshDb({ upTo: '20261118090000_network_management.sql' });
   await addRouter(db, 'R1');
   await assert.rejects(
     db.exec(fs.readFileSync(path.resolve(import.meta.dirname, '../rollbacks/20261118090000_network_management.rollback.sql'), 'utf8')),

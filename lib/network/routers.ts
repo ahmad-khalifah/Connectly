@@ -96,6 +96,8 @@ export type RouterForLifecycle = {
   management_ip: string | null;
   last_test_at: string | null;
   last_test_result: { ok?: unknown } | null;
+  /** The router's hotspot settings: the current version must be applied before activation. */
+  hotspot: { version: number; applied_version: number | null } | null;
 };
 
 /** How recent a passing Test Connection must be to activate. */
@@ -121,6 +123,8 @@ export function activationBlockers(r: RouterForLifecycle, now = Date.now()): str
   const at = r.last_test_at ? Date.parse(r.last_test_at) : NaN;
   if (!passed || Number.isNaN(at)) reasons.push('Test Connection has not passed.');
   else if (now - at > TEST_VALID_FOR_MS) reasons.push('The last passing Test Connection is older than 24 hours; test again.');
+  if (!r.hotspot) reasons.push('Hotspot settings have not been saved.');
+  else if (r.hotspot.applied_version !== r.hotspot.version) reasons.push('The current hotspot settings have not been applied to the router yet.');
   return reasons;
 }
 

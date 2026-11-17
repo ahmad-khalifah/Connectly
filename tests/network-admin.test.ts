@@ -66,6 +66,7 @@ describe('activationBlockers (activation needs a real, recent, passing test)', (
     lifecycle_status: 'registered' as const, connection_method: 'wireguard' as const, has_credential: true,
     wg_public_key: WG, tunnel_ip: '10.77.0.2', management_ip: null,
     last_test_at: new Date(Date.now() - 60_000).toISOString(), last_test_result: { ok: true },
+    hotspot: { version: 2, applied_version: 2 },
   };
   it('allows a router with a passing test from a minute ago', async () => {
     const { activationBlockers } = await import('@/lib/network/routers');
@@ -81,6 +82,9 @@ describe('activationBlockers (activation needs a real, recent, passing test)', (
     [{ tunnel_ip: null }, /tunnel address/],
     [{ lifecycle_status: 'retired' }, /cannot be activated/],
     [{ lifecycle_status: 'active' }, /cannot be activated/],
+    [{ hotspot: null }, /Hotspot settings have not been saved/],
+    [{ hotspot: { version: 3, applied_version: 2 } }, /current hotspot settings have not been applied/],
+    [{ hotspot: { version: 1, applied_version: null } }, /current hotspot settings have not been applied/],
   ])('blocks when %j', async (patch, msg) => {
     const { activationBlockers } = await import('@/lib/network/routers');
     expect(activationBlockers({ ...base, ...patch } as never).join(' ')).toMatch(msg);
@@ -175,8 +179,9 @@ describe('router actions', () => {
     const { POST } = await import('@/app/api/admin/network/routers/[id]/[action]/route');
     return POST(new Request('http://x', { method: 'POST' }), params({ id: ROUTER, action }));
   };
-  const world = (r: Record<string, unknown>, extra: Handler = () => ({ data: null, error: null })): Handler => (op) => {
+  const world = (r: Record<string, unknown>, extra: Handler = () => ({ data: null, error: null }), hotspot: unknown = { version: 1, applied_version: 1 }): Handler => (op) => {
     if (op.table === 'routers' && op.action === 'select') return { data: r, error: null };
+    if (op.table === 'router_hotspot_settings' && op.action === 'select') return { data: hotspot, error: null };
     if (op.table === 'routers' && op.action === 'update') return { data: [{ id: ROUTER }], error: null };
     return extra(op);
   };
@@ -189,6 +194,35 @@ describe('router actions', () => {
     const update = fake.ops.find((o) => o.table === 'routers' && o.action === 'update')!;
     expect(update.values).toMatchObject({ lifecycle_status: 'active' });
     expect(update.filters).toEqual(expect.arrayContaining([['id', ROUTER], ['lifecycle_status in', ['registered', 'suspended']], ['last_test_at', r.last_test_at]]));
+  });
+
+  it('refuses activation until the current hotspot settings are applied', async () => {
+    fake = createFakeDb(world(router(), undefined, { version: 2, applied_version: 1 }));
+    const res = await act('activate');
+    expect(res.status).toBe(409);
+    expect((await res.json()).reasons.join(' ')).toMatch(/hotspot settings have not been applied/);
+    expect(fake.ops.some((o) => o.table === 'routers' && o.action === 'update')).toBe(false);
+  });
+
+  it('Apply to router queues one hotspot job for the saved version', async () => {
+    fake = createFakeDb(world(router(), undefined, { version: 4 }));
+    (fake.db as unknown as { rpc: unknown }).rpc = vi.fn(async () => ({ data: { job_id: JOB, created: true, status: 'queued' }, error: null }));
+    const res = await act('apply-hotspot');
+    expect(res.status).toBe(201);
+    const rpc = (fake.db as unknown as { rpc: ReturnType<typeof vi.fn> }).rpc;
+    expect(rpc).toHaveBeenCalledWith('enqueue_job', expect.objectContaining({ p_kind: 'router.configure_hotspot', p_router_id: ROUTER, p_payload: { version: 4 } }));
+    expect(rpc.mock.calls[0]![1].p_idempotency_key).toMatch(new RegExp(`^hotspot:${ROUTER}:v4:`));
+  });
+
+  it.each([
+    ['no saved settings', router(), null, /Save the hotspot settings first/],
+    ['no credential', router({ credential_key_id: null }), { version: 1 }, /No API credential/],
+    ['a retired router', router({ lifecycle_status: 'retired' }), { version: 1 }, /retired router cannot be configured/],
+  ])('Apply to router refuses with %s', async (_l, r, hs, msg) => {
+    fake = createFakeDb(world(r, undefined, hs));
+    const res = await act('apply-hotspot');
+    expect(res.status).toBe(409);
+    expect((await res.json()).message).toMatch(msg);
   });
 
   it.each([
@@ -356,5 +390,64 @@ describe('POST /api/admin/network/access/[id]/revoke', () => {
     expect((await revoke()).status).toBe(404);
     expect((await revoke('not-a-uuid')).status).toBe(404);
     expect(fake.rpcCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------- hotspot settings
+describe('hotspot settings', () => {
+  it('accepts sensible settings and normalises hosts', async () => {
+    const { parseHotspotInput } = await import('@/lib/network/hotspot');
+    const r = parseHotspotInput({ lan_interface: 'bridge-hotspot', gateway_cidr: '10.20.0.1/22', dns_name: 'WiFi.GetConnectly.net', extra_walled_garden: '*.Paystack.co\nexample.com, example.com' });
+    expect(r).toEqual({ ok: true, value: { lan_interface: 'bridge-hotspot', gateway_cidr: '10.20.0.1/22', dns_name: 'wifi.getconnectly.net', extra_walled_garden: ['*.paystack.co', 'example.com'] } });
+  });
+  it.each([
+    [{ lan_interface: 'ether2; /system reset' }, 'lan_interface', /port or bridge name/],
+    [{ gateway_cidr: '8.8.8.1/24' }, 'gateway_cidr', /private range/],
+    [{ gateway_cidr: '10.10.0.0/24' }, 'gateway_cidr', /network's own address/],
+    [{ gateway_cidr: '10.10.0.255/24' }, 'gateway_cidr', /network's own address/],
+    [{ gateway_cidr: '10.77.1.1/24' }, 'gateway_cidr', /controller tunnel range/],
+    [{ gateway_cidr: '10.64.0.1/12' }, 'gateway_cidr', /between \/16/],
+    [{ gateway_cidr: '10.10.0.1' }, 'gateway_cidr', /with its size/],
+    [{ dns_name: '*.wifi.example.com' }, 'dns_name', /plain host name/],
+    [{ extra_walled_garden: 'ok.example.com bad_host' }, 'extra_walled_garden', /not a host name/],
+  ])('rejects %j', async (patch, key, msg) => {
+    const { parseHotspotInput, HOTSPOT_DEFAULTS } = await import('@/lib/network/hotspot');
+    const r = parseHotspotInput({ ...HOTSPOT_DEFAULTS, ...patch });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors[key]).toMatch(msg);
+  });
+  it('reports where a router stands', async () => {
+    const { hotspotState } = await import('@/lib/network/hotspot');
+    expect(hotspotState(null)).toBe('not_set');
+    expect(hotspotState({ version: 1, applied_version: null, last_error: null })).toBe('not_applied');
+    expect(hotspotState({ version: 2, applied_version: 1, last_error: null })).toBe('changes_pending');
+    expect(hotspotState({ version: 2, applied_version: 1, last_error: 'no port' })).toBe('failed');
+    expect(hotspotState({ version: 2, applied_version: 2, last_error: null })).toBe('applied');
+  });
+
+  const put = async (body: unknown, id = ROUTER) => {
+    const { PUT } = await import('@/app/api/admin/network/routers/[id]/hotspot/route');
+    return PUT(new Request('http://x', { method: 'PUT', body: JSON.stringify(body) }), params({ id }));
+  };
+  it('saves settings without touching the router, and records who changed them', async () => {
+    fake = createFakeDb((op) => {
+      if (op.table === 'routers') return { data: { id: ROUTER, name: 'Garki main', location_id: LOC, lifecycle_status: 'registered' }, error: null };
+      if (op.table === 'router_hotspot_settings') return { data: { version: 1 }, error: null };
+      return { data: null, error: null };
+    });
+    const res = await put({ lan_interface: 'ether2', gateway_cidr: '10.10.0.1/22', dns_name: 'wifi.getconnectly.net', extra_walled_garden: '' });
+    expect(res.status).toBe(200);
+    const up = fake.ops.find((o) => o.table === 'router_hotspot_settings' && o.action === 'upsert')!;
+    expect(up.values).toMatchObject({ router_id: ROUTER, lan_interface: 'ether2', updated_by: 'connectly.hq@outlook.com' });
+    expect(fake.rpcCalls).toHaveLength(0);
+    expect(fake.ops.find((o) => o.table === 'activity_logs')?.values).toMatchObject({ event_type: 'router.hotspot_saved' });
+  });
+  it('rejects bad input with field messages and saves nothing', async () => {
+    fake = createFakeDb((op) => (op.table === 'routers' ? { data: { id: ROUTER, name: 'R', location_id: LOC, lifecycle_status: 'registered' }, error: null } : { data: null, error: null }));
+    const res = await put({ lan_interface: 'ether2', gateway_cidr: '1.2.3.4/24', dns_name: 'x', extra_walled_garden: '' });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(Object.keys(body.errors).sort()).toEqual(['dns_name', 'gateway_cidr']);
+    expect(fake.ops.some((o) => o.action === 'upsert')).toBe(false);
   });
 });

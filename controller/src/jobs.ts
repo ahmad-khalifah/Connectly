@@ -6,6 +6,7 @@ import type { Db, GrantRow, Job, RouterRow } from './db.ts';
 import { decryptRouterPassword, KeyError, type CredentialKeys } from './keys.ts';
 import { formatRouterOsDuration, RouterError, type RouterClient } from './routeros.ts';
 import type { Logger } from './log.ts';
+import { applyHotspot, planHotspot } from './hotspot.ts';
 
 export const ROUTER_API_USER = 'connectly-ctrl';
 
@@ -169,6 +170,22 @@ async function disconnect(job: Job, router: RouterRow, ctx: JobContext): Promise
   }
 }
 
+async function configureHotspot(job: Job, router: RouterRow, ctx: JobContext): Promise<JobOutcome> {
+  const settings = await ctx.db.getHotspotSettings(router.id);
+  if (!settings) return { ok: false, error: 'No hotspot settings are saved for this router yet.', retryInSeconds: -1 };
+  try {
+    const plan = planHotspot(router.identifier, settings, await ctx.db.getPortalSettings());
+    const report = await applyHotspot(clientFor(router, ctx), plan);
+    await ctx.db.recordHotspotApplied(router.id, settings.version);
+    await ctx.db.logActivity('router.hotspot_applied', 'info', router.id, router.location_id,
+      `Hotspot settings v${settings.version} applied to ${router.identifier}`, { created: report.created.length, updated: report.updated.length, removed: report.removed.length });
+    return { ok: true, result: { version: settings.version, ...report } };
+  } catch (e) {
+    if (e instanceof RouterError || e instanceof KeyError) await ctx.db.recordHotspotError(router.id, e.message);
+    return failure(e);
+  }
+}
+
 export async function runJob(job: Job, ctx: JobContext): Promise<JobOutcome> {
   const router = await ctx.db.getRouter(job.router_id);
   if (!router) return { ok: false, error: 'The router no longer exists.', retryInSeconds: -1 };
@@ -181,6 +198,8 @@ export async function runJob(job: Job, ctx: JobContext): Promise<JobOutcome> {
       return revoke(job, router, ctx);
     case 'session.disconnect':
       return disconnect(job, router, ctx);
+    case 'router.configure_hotspot':
+      return configureHotspot(job, router, ctx);
     default:
       return { ok: false, error: `This controller version does not handle ${job.kind} jobs yet.`, retryInSeconds: -1 };
   }

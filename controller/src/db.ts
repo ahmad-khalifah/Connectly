@@ -221,6 +221,28 @@ export class Db {
     await this.pool.query('update public.network_authorizations set last_error = $2, updated_at = now() where id = $1', [grantId, error.slice(0, 2000)]);
   }
 
+  async getHotspotSettings(routerId: string): Promise<(import('./hotspot.ts').HotspotSettings & { applied_version: number | null }) | null> {
+    const { rows } = await this.pool.query(
+      `select lan_interface, gateway_cidr::text as gateway_cidr, dns_name, extra_walled_garden, version, applied_version
+         from public.router_hotspot_settings where router_id = $1`, [routerId]);
+    return rows[0] ?? null;
+  }
+
+  async getPortalSettings(): Promise<import('./hotspot.ts').PortalSettings> {
+    const { rows } = await this.pool.query('select portal_url, walled_garden_hosts from public.network_settings where id');
+    return rows[0];
+  }
+
+  async recordHotspotApplied(routerId: string, version: number): Promise<void> {
+    await this.pool.query(
+      `update public.router_hotspot_settings set applied_version = least($2, version), applied_at = now(), last_error = null, updated_at = now()
+        where router_id = $1`, [routerId, version]);
+  }
+
+  async recordHotspotError(routerId: string, error: string): Promise<void> {
+    await this.pool.query('update public.router_hotspot_settings set last_error = $2, updated_at = now() where router_id = $1', [routerId, error.slice(0, 2000)]);
+  }
+
   async logActivity(eventType: string, severity: 'info' | 'warn' | 'error', entityId: string, locationId: string | null, message: string, metadata: object = {}): Promise<void> {
     await this.pool.query(
       `insert into public.activity_logs (event_type, severity, entity_id, location_id, message, metadata) values ($1, $2, $3, $4, $5, $6)`,

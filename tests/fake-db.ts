@@ -3,7 +3,7 @@
 // Each test supplies handlers; every call is recorded for assertions.
 
 type Result = { data: unknown; error: { code?: string; message: string } | null };
-type Op = { table: string; action: 'insert' | 'select' | 'update'; values?: unknown; filters: [string, unknown][] };
+type Op = { table: string; action: 'insert' | 'select' | 'update' | 'upsert'; values?: unknown; filters: [string, unknown][] };
 export type Handler = (op: Op) => Result;
 
 export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<string, unknown>) => Result = () => ({ data: null, error: null })) {
@@ -18,6 +18,7 @@ export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<st
     };
     const chain: Record<string, unknown> = {
       insert(values: unknown) { op.action = 'insert'; op.values = values; return chain; },
+      upsert(values: unknown) { op.action = 'upsert'; op.values = values; return chain; },
       update(values: unknown) { op.action = 'update'; op.values = values; return chain; },
       select() { return chain; },
       eq(col: string, val: unknown) { op.filters.push([col, val]); return chain; },

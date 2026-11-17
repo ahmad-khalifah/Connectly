@@ -273,6 +273,57 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.equal(fs.readFileSync(file, 'utf8').includes(ip.k), false);
   });
 
+  test('hotspot: configured on a registered router, idempotent, follows settings changes', async () => {
+    const r = await register('cx-hs-01');
+    await t.admin.query(`insert into router_hotspot_settings (router_id, extra_walled_garden) values ($1, array['*.paystack.co'])`, [r.id]);
+    const id1 = await enqueue('router.configure_hotspot', r.id);
+    await ctl.runOnce();
+    assert.equal((await job(id1)).status, 'succeeded', (await job(id1)).last_error);
+    const m = (p: string) => r.fake.menus.get(p) ?? [];
+    assert.equal(m('/ip/address')[0]!.address, '10.10.0.1/22');
+    assert.equal(m('/ip/pool')[0]!.ranges, '10.10.0.2-10.10.3.254');
+    assert.equal(m('/ip/hotspot')[0]!.interface, 'ether2');
+    assert.equal(m('/ip/hotspot/profile')[0]!['dns-name'], 'wifi.getconnectly.net');
+    assert.equal(r.fake.dns['allow-remote-requests'], 'true');
+    assert.equal(m('/ip/firewall/filter').length, 2, 'DNS refused from every other port (udp + tcp)');
+    assert.deepEqual(m('/ip/hotspot/walled-garden').map((w) => w['dst-host']).sort(), ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
+    assert.match(m('/file')[0]!.contents!, /url=https:\/\/getconnectly\.net\/portal\?router=cx-hs-01/);
+    let s = (await t.admin.query('select version, applied_version, applied_at from router_hotspot_settings where router_id = $1', [r.id])).rows[0];
+    assert.deepEqual([s.version, s.applied_version], [1, 1]);
+    assert.ok(s.applied_at);
+
+    const id2 = await enqueue('router.configure_hotspot', r.id);
+    await ctl.runOnce();
+    const res2 = (await job(id2)).result;
+    assert.deepEqual([res2.created.length, res2.updated.length, res2.removed.length], [0, 0, 0], 'second apply changes nothing');
+
+    await t.admin.query(`update router_hotspot_settings set dns_name = 'hotspot.example.com', extra_walled_garden = '{}' where router_id = $1`, [r.id]);
+    s = (await t.admin.query('select version, applied_version from router_hotspot_settings where router_id = $1', [r.id])).rows[0];
+    assert.deepEqual([s.version, s.applied_version], [2, 1], 'portal shows changes not yet applied');
+    const id3 = await enqueue('router.configure_hotspot', r.id);
+    await ctl.runOnce();
+    const res3 = (await job(id3)).result;
+    assert.ok(res3.updated.includes('hotspot profile'));
+    assert.ok(res3.removed.includes('walled garden *.paystack.co'));
+    assert.equal((await t.admin.query('select applied_version from router_hotspot_settings where router_id = $1', [r.id])).rows[0].applied_version, 2);
+    assert.equal(m('/ip/hotspot').length, 1, 'still one hotspot server');
+  });
+
+  test('hotspot: a wrong customer port or missing settings fail clearly', async () => {
+    const r = await register('cx-hs-02');
+    const none = await enqueue('router.configure_hotspot', r.id);
+    await ctl.runOnce();
+    assert.match((await job(none)).last_error, /No hotspot settings are saved/);
+    await t.admin.query(`insert into router_hotspot_settings (router_id, lan_interface) values ($1, 'ether9')`, [r.id]);
+    const bad = await enqueue('router.configure_hotspot', r.id);
+    await ctl.runOnce();
+    const j = await job(bad);
+    assert.equal(j.status, 'dead');
+    assert.match(j.last_error, /no port called "ether9"/);
+    assert.match((await t.admin.query('select last_error from router_hotspot_settings where router_id = $1', [r.id])).rows[0].last_error, /ether9/);
+    assert.equal((r.fake.menus.get('/ip/hotspot') ?? []).length, 0, 'nothing was changed on the router');
+  });
+
   test('start/stop: a payment made while running is provisioned automatically; stop waits cleanly', async () => {
     const r = await register('cx-site-08', 'active');
     await ctl.start();
