@@ -236,7 +236,7 @@ describe('controller against a local copy of the database', { skip }, () => {
       let status = 0;
       let body = '';
       const res = { writeHead(s: number) { status = s; return res; }, end(b?: string) { body = b ?? ''; } };
-      await handler({ method: 'GET', url, socket: { remoteAddress: from } } as never, res as never);
+      await handler({ method: 'GET', url, socket: { remoteAddress: from, localAddress: '10.77.0.1' } } as never, res as never);
       return { status, body };
     };
     const ok = await call(`/bootstrap/${r.id}`, `::ffff:${r.tunnel_ip}`);
@@ -248,6 +248,32 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.equal((await call(`/bootstrap/not-a-uuid`, r.tunnel_ip)).status, 404);
     assert.equal(lines.some((l) => l.includes(pw)), false, 'the password is in no log line');
     assert.equal((await t.admin.query(`select count(*)::int n from activity_logs where event_type = 'router.bootstrapped' and entity_id = $1`, [r.id])).rows[0].n, 1);
+  });
+
+  test('bootstrap: a direct-HTTPS router on a private network, only when allowed', async () => {
+    const pw = crypto.randomBytes(24).toString('base64url');
+    const r = await addRouter(t.admin, { identifier: 'cx-direct-01', publicPem: keys.publicPem, keyId: keys.keyId, password: pw });
+    await t.admin.query(`update routers set connection_method = 'direct_https', management_ip = '192.168.56.200', tunnel_ip = null, wg_public_key = null where id = $1`, [r.id]);
+    const lines: string[] = [];
+    const make = (allowDirect: boolean) => createBootstrapHandler({ db, keys, log: createLogger((l) => lines.push(l)), controllerIp: async () => '10.77.0.1', allowDirect });
+    const call = async (handler: ReturnType<typeof make>, from: string, local = '192.168.56.1') => {
+      let status = 0;
+      let body = '';
+      const res = { writeHead(s: number) { status = s; return res; }, end(b?: string) { body = b ?? ''; } };
+      await handler({ method: 'GET', url: `/bootstrap/${r.id}`, socket: { remoteAddress: from, localAddress: local } } as never, res as never);
+      return { status, body };
+    };
+    assert.equal((await call(make(false), '192.168.56.200')).status, 404, 'off unless BOOTSTRAP_ALLOW_DIRECT=yes');
+    const ok = await call(make(true), '::ffff:192.168.56.200');
+    assert.equal(ok.status, 200);
+    assert.ok(ok.body.includes(pw));
+    assert.match(ok.body, /address=192\.168\.56\.1\/32/, 'API user limited to the controller address the router used');
+    assert.doesNotMatch(ok.body, /in-interface=/, 'no WireGuard interface on a direct router');
+    assert.equal((await call(make(true), '192.168.56.201')).status, 404, 'another address');
+    assert.equal((await call(make(true), '192.168.56.200', '203.0.113.5')).status, 404, 'controller answering on a public address');
+    await t.admin.query(`update routers set management_ip = '203.0.113.9' where id = $1`, [r.id]);
+    assert.equal((await call(make(true), '203.0.113.9')).status, 404, 'router on a public address');
+    assert.equal(lines.some((l) => l.includes(pw)), false, 'the password is in no log line');
   });
 
   test('jobs this version does not handle fail clearly instead of pretending', async () => {

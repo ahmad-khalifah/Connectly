@@ -170,3 +170,12 @@ test('app tick: calls the app with the bearer secret, logs failures, never throw
   assert.ok(lines.some((l) => l.includes('app_tick.failed')) && lines.some((l) => l.includes('app_tick.unreachable')));
   assert.ok(!lines.join('').includes(secret), 'the secret never reaches the log');
 });
+
+test('BOOTSTRAP_ALLOW_DIRECT only with a private bootstrap address', () => {
+  const base = { CONTROLLER_ENV: 'local', DATABASE_URL: 'postgres://u@127.0.0.1/db' };
+  assert.equal(loadConfig(base).bootstrapAllowDirect, false);
+  assert.equal(loadConfig({ ...base, BOOTSTRAP_LISTEN: '192.168.56.1:8080', BOOTSTRAP_ALLOW_DIRECT: 'yes' }).bootstrapAllowDirect, true);
+  assert.throws(() => loadConfig({ ...base, BOOTSTRAP_LISTEN: '0.0.0.0:8080', BOOTSTRAP_ALLOW_DIRECT: 'yes' }), /private address/);
+  assert.throws(() => loadConfig({ ...base, BOOTSTRAP_LISTEN: '203.0.113.5:8080', BOOTSTRAP_ALLOW_DIRECT: 'yes' }), /private address/);
+  assert.throws(() => loadConfig({ ...base, BOOTSTRAP_ALLOW_DIRECT: 'yes' }), /private address/);
+});

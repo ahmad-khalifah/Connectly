@@ -61,7 +61,7 @@ async function main() {
 
   let server: http.Server | null = null;
   if (cfg.bootstrap) {
-    server = http.createServer(createBootstrapHandler({ db, keys, log, controllerIp: async () => (await db.readTunnelSettings()).controller_tunnel_ip }));
+    server = http.createServer(createBootstrapHandler({ db, keys, log, controllerIp: async () => (await db.readTunnelSettings()).controller_tunnel_ip, allowDirect: cfg.bootstrapAllowDirect }));
     server.headersTimeout = 10_000;
     server.requestTimeout = 15_000;
     await new Promise<void>((resolve) => server!.listen(cfg.bootstrap!.port, cfg.bootstrap!.host, resolve));

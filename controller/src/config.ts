@@ -27,6 +27,8 @@ export type Config = {
   /** Where the router peer list is written for wg-peers-sync.sh (null: not managed here). */
   wgPeersFile: string | null;
   bootstrap: { host: string; port: number } | null;
+  /** Also serve direct-HTTPS routers on private networks (see bootstrap.ts). */
+  bootstrapAllowDirect: boolean;
   concurrency: number;
   pollIntervalMs: number;
   heartbeatIntervalMs: number;
@@ -84,6 +86,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, readFile: (p: s
   }
 
   const bootstrapRaw = env.BOOTSTRAP_LISTEN ?? '';
+  const bootstrapAllowDirect = env.BOOTSTRAP_ALLOW_DIRECT === 'yes';
+  if (bootstrapAllowDirect) {
+    const host = bootstrapRaw ? hostPort(bootstrapRaw, 'BOOTSTRAP_LISTEN').host : '';
+    const m = /^(\d+)\.(\d+)\./.exec(host);
+    const priv = !!m && (m[1] === '10' || (m[1] === '172' && Number(m[2]) >= 16 && Number(m[2]) <= 31) || (m[1] === '192' && m[2] === '168'));
+    if (!priv) throw new ConfigError('BOOTSTRAP_ALLOW_DIRECT=yes needs BOOTSTRAP_LISTEN on a private address (10.x, 172.16-31.x or 192.168.x), never a public one.');
+  }
   const endpointRaw = env.CONTROLLER_ENDPOINT ?? '';
   if (endpointRaw) hostPort(endpointRaw, 'CONTROLLER_ENDPOINT');
 
@@ -108,6 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, readFile: (p: s
     wgPublicKeyFile: env.WG_PUBLIC_KEY_FILE || null,
     wgPeersFile: env.WG_PEERS_FILE || null,
     bootstrap: bootstrapRaw ? hostPort(bootstrapRaw, 'BOOTSTRAP_LISTEN') : null,
+    bootstrapAllowDirect,
     concurrency: int(env, 'CONTROLLER_CONCURRENCY', 2, 1, 16),
     pollIntervalMs: int(env, 'POLL_INTERVAL_MS', 2000, 200, 60_000),
     heartbeatIntervalMs: int(env, 'HEARTBEAT_INTERVAL_MS', 30_000, 1000, 120_000),
