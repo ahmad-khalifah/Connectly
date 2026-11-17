@@ -10,7 +10,7 @@ begin
   end if;
 end $$;
 
--- claim_next_job as in 20261118090000.
+-- claim_next_job exactly as in 20261118090000 (copied verbatim, so its definition fingerprint matches).
 create or replace function public.claim_next_job(p_worker text)
 returns setof public.controller_jobs
 language plpgsql
@@ -20,6 +20,7 @@ as $$
 declare
   v_id uuid;
 begin
+  -- Crashed jobs that have used every attempt are given up.
   update public.controller_jobs
      set status = 'dead', last_error = coalesce(last_error, 'worker stopped responding'),
          finished_at = now(), updated_at = now(), locked_by = null, locked_at = null

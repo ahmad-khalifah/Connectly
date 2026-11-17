@@ -102,3 +102,13 @@ test('rollback restores the exact post-network schema; refuses while hotspot job
   await db.query(`delete from routers`);
   assert.equal(await fingerprint(db), before);
 });
+
+test('rollback restores claim_next_job byte for byte (staging today: 70961b0833c06a7868500e4fbd4c67c0)', async () => {
+  const md5 = `select md5(pg_get_functiondef('public.claim_next_job(text)'::regprocedure)) m`;
+  const original = (await (await freshDb({ upTo: '20261118090000_network_management.sql' })).query(md5)).rows[0].m;
+  assert.equal(original, '70961b0833c06a7868500e4fbd4c67c0', 'local copy of the pre-hotspot function matches what staging runs');
+  const db = await freshDb();
+  assert.notEqual((await db.query(md5)).rows[0].m, original, 'the migration changes it');
+  await db.exec(fs.readFileSync(ROLLBACK, 'utf8'));
+  assert.equal((await db.query(md5)).rows[0].m, original);
+});
