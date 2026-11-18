@@ -301,6 +301,11 @@ describe('controller against a local copy of the database', { skip }, () => {
 
   test('hotspot: configured on a registered router, idempotent, follows settings changes', async () => {
     const r = await register('cx-hs-01');
+    // Like a physical MikroTik's default configuration: the input chain ends by dropping anything not from LAN.
+    r.fake.menus.set('/ip/firewall/filter', [
+      { '.id': '*1', chain: 'input', action: 'accept', 'connection-state': 'established,related,untracked', comment: 'defconf: accept established,related,untracked' },
+      { '.id': '*2', chain: 'input', action: 'drop', 'in-interface-list': '!LAN', comment: 'defconf: drop all not coming from LAN' },
+    ]);
     await t.admin.query(`insert into router_hotspot_settings (router_id, extra_walled_garden) values ($1, array['*.paystack.co'])`, [r.id]);
     const id1 = await enqueue('router.configure_hotspot', r.id);
     await ctl.runOnce();
@@ -311,7 +316,11 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.equal(m('/ip/hotspot')[0]!.interface, 'ether2');
     assert.equal(m('/ip/hotspot/profile')[0]!['dns-name'], 'wifi.getconnectly.net');
     assert.equal(r.fake.dns['allow-remote-requests'], 'true');
-    assert.equal(m('/ip/firewall/filter').length, 2, 'DNS refused from every other port (udp + tcp)');
+    const fw = m('/ip/firewall/filter').map((x) => x.comment);
+    assert.deepEqual(fw.slice(0, 2).sort(), ['connectly-hotspot-dns-allow-tcp', 'connectly-hotspot-dns-allow-udp'], 'customer DNS allowed above the default drop rule');
+    assert.ok(fw.indexOf('defconf: drop all not coming from LAN') > 1);
+    assert.ok(fw.includes('connectly-hotspot-dns-udp') && fw.includes('connectly-hotspot-dns-tcp'), 'DNS refused from every other port (udp + tcp)');
+    assert.equal(fw.length, 6);
     assert.deepEqual(m('/ip/hotspot/walled-garden').map((w) => w['dst-host']).sort(), ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
     assert.match(m('/file')[0]!.contents!, /url=https:\/\/getconnectly\.net\/portal\?router=cx-hs-01/);
     let s = (await t.admin.query('select version, applied_version, applied_at from router_hotspot_settings where router_id = $1', [r.id])).rows[0];

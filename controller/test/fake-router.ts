@@ -110,6 +110,15 @@ class FakeClient implements RouterClient {
   async command(path: string, fields: Record<string, string>) {
     this.call(`command ${path}`);
     if (path === '/ip/dns/set') Object.assign(this.r.dns, fields);
+    if (path.endsWith('/move')) {
+      // RouterOS: move item `numbers` to just before item `destination`.
+      const m = this.menu(path.slice(0, -'/move'.length));
+      const from = m.findIndex((x) => x['.id'] === fields.numbers);
+      if (from < 0) throw new Error('no such item');
+      const [item] = m.splice(from, 1);
+      const to = m.findIndex((x) => x['.id'] === fields.destination);
+      m.splice(to < 0 ? m.length : to, 0, item!);
+    }
     return {};
   }
 }

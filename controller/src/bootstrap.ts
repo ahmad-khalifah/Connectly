@@ -55,8 +55,13 @@ export function bootstrapScript(router: RouterRow, password: string, controllerI
     `:if ([:len [/certificate find name="connectly-api"]] = 0) do={ /certificate add name="connectly-api" common-name="${ros(router.identifier)}" key-size=2048 days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server }`,
     ':do { /certificate sign connectly-api ca=connectly-ca } on-error={ :log info "Connectly: HTTPS certificate already signed" }',
     ':delay 15s',
-    `/ip service set www-ssl certificate=connectly-api disabled=no port=443 address=${controllerIp}/32`,
+    // RouterOS 7.2x renamed the service's "address" to "available-from"; use whichever this version has.
+    `:do { /ip service set www-ssl certificate=connectly-api disabled=no port=443 available-from=${controllerIp}/32 } on-error={ /ip service set www-ssl certificate=connectly-api disabled=no port=443 address=${controllerIp}/32 }`,
     `:if ([:len [/ip firewall filter find comment="Connectly controller API"]] = 0) do={ /ip firewall filter add chain=input action=accept protocol=tcp dst-port=443 src-address=${controllerIp}${inInterface} comment="Connectly controller API" }`,
+    // A new rule goes to the end of the chain, after the default "drop all not coming from LAN"
+    // that physical MikroTik routers ship with, so it would never match: move it to the top.
+    // (The CHR lab has no default firewall, so it could not show this.)
+    `/ip firewall filter move [find comment="Connectly controller API"] destination=0`,
     ':log info "Connectly bootstrap applied"',
   ].join('\n');
 }

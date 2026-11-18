@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
+import dns from 'node:dns/promises';
 import { freshDb, paidPurchase, LOC } from '../test/pg.ts';
 import { Db } from '../src/db.ts';
 import { loadOrCreateCredentialKeys } from '../src/keys.ts';
@@ -114,7 +115,15 @@ async function main() {
       console.log('      The router finished applying it.');
       return;
     }
-    const script = `/system identity set name="${IDENTITY}"\n`
+    // Give the CHR the firewall a physical MikroTik ships with (management port ether2 on the LAN
+    // list, everything else dropped at the end of input), so the lab shows whether our rules land above it.
+    const defconf = [
+      ':if ([:len [/interface list find name="LAN"]] = 0) do={ /interface list add name=LAN }',
+      ':if ([:len [/interface list member find list=LAN interface=ether2]] = 0) do={ /interface list member add list=LAN interface=ether2 }',
+      ':if ([:len [/ip firewall filter find comment="defconf: accept established,related,untracked"]] = 0) do={ /ip firewall filter add chain=input action=accept connection-state=established,related,untracked comment="defconf: accept established,related,untracked" }',
+      ':if ([:len [/ip firewall filter find comment="defconf: drop all not coming from LAN"]] = 0) do={ /ip firewall filter add chain=input action=drop in-interface-list=!LAN comment="defconf: drop all not coming from LAN" }',
+    ].join('\n');
+    const script = `/system identity set name="${IDENTITY}"\n${defconf}\n`
       + bootstrapScript(router, password, HOST_IP).replace('in-interface=wg-connectly', 'in-interface=ether2')
       + `\n/tool fetch url="http://${HOST_IP}:${PORT}/done" output=none`;
     res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }).end(script + '\n');
@@ -185,6 +194,22 @@ async function main() {
   record('Router login page sends customers to the Connectly portal', !!loginFile?.contents?.includes(`${PORTAL}?router=${IDENTITY}`),
     loginFile ? `hotspot/login.html, ${loginFile.contents?.length ?? 0} bytes` : 'hotspot/login.html not found');
 
+  // ---------------------------------------------------------------- default firewall does not shadow our rules
+  const fw = (await live.list('/ip/firewall/filter')).filter((x) => x.dynamic !== 'true').map((x) => x.comment ?? '');
+  const dropAt = fw.indexOf('defconf: drop all not coming from LAN');
+  const above = (c: string) => fw.indexOf(c) >= 0 && fw.indexOf(c) < dropAt;
+  record('Our firewall rules sit above the default "drop all not coming from LAN"', dropAt >= 0 && above('Connectly controller API') && above('connectly-hotspot-dns-allow-udp') && above('connectly-hotspot-dns-allow-tcp'),
+    `input order: ${fw.map((c, i) => `${i}:${c || '(no comment)'}`).join(' | ')}`);
+  try {
+    const resolver = new dns.Resolver({ timeout: 4000, tries: 1 });
+    resolver.setLocalAddress(CUSTOMER_IP);
+    resolver.setServers([HOTSPOT_CIDR.split('/')[0]!]);
+    const a = await resolver.resolve4('wifi.getconnectly.net');
+    record('Customer side: DNS through the router works behind the default firewall', a.includes(HOTSPOT_CIDR.split('/')[0]!), `wifi.getconnectly.net -> ${a.join(', ')}`);
+  } catch (e) {
+    record('Customer side: DNS through the router works behind the default firewall', false, `DNS query to the router failed: ${e instanceof Error ? e.message : e}`);
+  }
+
   // ---------------------------------------------------------------- repeat is harmless
   const again = await runJob('router.configure_hotspot');
   const created = (again.result?.created ?? []) as string[];
@@ -206,6 +231,23 @@ async function main() {
   await drain();
   const user = await live.findHotspotUser(p.voucher);
   record('Paid purchase -> WiFi code on the router', !!user, user ? `hotspot user ${user.name}, profile ${user.profile}, limit ${user.limitUptime}` : 'not found on router');
+
+  // A 2-device plan: RouterOS enforces the limit through the user profile's shared-users.
+  // (Proving the third device is refused needs real separate devices: physical test stage G.)
+  const plan2 = (await t.admin.query(
+    `insert into plans (name, price_kobo, duration_seconds, speed_down_mbps, speed_up_mbps, device_limit, is_active)
+     values ('Lab 2-device day', 50000, 86400, 8, 2, 2, true) returning id`)).rows[0].id as string;
+  const ref2 = `CONN_${crypto.randomBytes(4).toString('hex')}`;
+  await t.admin.query(
+    `insert into purchases (plan_id, location_id, router_id, reference, phone_number, mac_address, amount_kobo, net_amount_ngn, payment_gateway)
+     values ($1, $2, $3, $4, '2348031110001', 'aa:bb:cc:dd:ee:02', 50000, 500, 'korapay')`, [plan2, LOC, routerId, ref2]);
+  await t.admin.query(`select confirm_payment($1, 50000::bigint, 'NGN')`, [ref2]);
+  const v2code = (await t.admin.query(`select a.voucher_code v from purchases p join network_authorizations a on a.purchase_id = p.id where p.reference = $1`, [ref2])).rows[0].v as string;
+  await drain();
+  const u2 = await live.findHotspotUser(v2code);
+  const [prof2] = u2?.profile ? await live.list('/ip/hotspot/user/profile', { name: u2.profile }) : [];
+  record('A 2-device plan gives its code a 2-device limit on the router', prof2?.['shared-users'] === '2' && prof2?.['rate-limit'] === '2M/8M',
+    u2 ? `user ${v2code}, profile ${u2.profile}: shared-users ${prof2?.['shared-users'] ?? '-'}, rate-limit ${prof2?.['rate-limit'] ?? '-'}` : 'code not on router');
 
   const gw = HOTSPOT_CIDR.split('/')[0];
   try {

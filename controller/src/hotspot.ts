@@ -99,6 +99,19 @@ export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: Por
 
 export type ApplyReport = { created: string[]; updated: string[]; removed: string[]; unchanged: string[] };
 
+/** Puts our firewall rule first in /ip/firewall/filter, so default drop rules cannot shadow it. */
+async function moveToTop(c: RouterClient, r: ApplyReport, label: string, comment: string) {
+  const rules = (await c.list('/ip/firewall/filter')).filter((x) => x.dynamic !== 'true');
+  const first = rules[0];
+  const ours = rules.find((x) => x.comment === comment);
+  if (!ours || !first || first['.id'] === ours['.id']) return;
+  // Our two DNS rules may sit together at the top; only move a rule that has a foreign rule above it.
+  const pos = rules.indexOf(ours);
+  if (rules.slice(0, pos).every((x) => (x.comment ?? '').startsWith(`${TAG}-dns-allow-`))) return;
+  await c.command('/ip/firewall/filter/move', { numbers: ours['.id']!, destination: first['.id']! });
+  r.updated.push(`${label}: moved above the existing firewall rules`);
+}
+
 /** Makes one menu entry (found by `key`) have `fields`, creating it if missing. */
 async function ensure(c: RouterClient, r: ApplyReport, label: string, path: string, key: Record<string, string>, fields: Record<string, string>) {
   const rows = await c.list(path, key);
@@ -146,6 +159,14 @@ export async function applyHotspot(c: RouterClient, plan: HotspotPlan): Promise<
   for (const proto of ['udp', 'tcp']) {
     await ensure(c, r, `DNS guard (${proto})`, '/ip/firewall/filter', { comment: `${TAG}-dns-${proto}` },
       { chain: 'input', protocol: proto, 'dst-port': '53', 'in-interface': `!${plan.lanInterface}`, action: 'drop' });
+  }
+  // Physical MikroTik routers ship with a firewall that ends "drop everything not
+  // coming from LAN". The customer port is not on that list, so customers'
+  // DNS to the router must be allowed explicitly, above that rule.
+  for (const proto of ['udp', 'tcp']) {
+    await ensure(c, r, `customer DNS allowed (${proto})`, '/ip/firewall/filter', { comment: `${TAG}-dns-allow-${proto}` },
+      { chain: 'input', protocol: proto, 'dst-port': '53', 'in-interface': plan.lanInterface, action: 'accept' });
+    await moveToTop(c, r, `customer DNS allowed (${proto})`, `${TAG}-dns-allow-${proto}`);
   }
 
   await ensure(c, r, 'hotspot profile', '/ip/hotspot/profile', { name: NAME }, { 'hotspot-address': plan.gateway, 'dns-name': plan.dnsName, 'login-by': 'http-chap,http-pap' });
