@@ -1,26 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-// Ensure this path matches where you created the server action
-import { initializeKoraCheckout } from '../actions/payment'; 
+import { initializeKoraCheckout } from '../actions/payment';
 import CodeLogin from './code-login';
+import { Button } from '@/components/ui/button';
+import { Field, inputClass } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
+import { naira, planData, planDevices, planDuration, planSpeed } from '@/lib/plan-format';
+import { cn } from '@/lib/utils';
+import { normaliseNigerianMobile } from '@/lib/phone';
 
-interface Plan {
+export interface Plan {
   id: string;
   name: string;
   price_kobo: number;
   speed_down_mbps: number | null;
   duration_seconds: number | null;
   device_limit: number | null;
-}
-
-/** "1 day", "3 hours", "30 minutes". */
-function fmtDuration(sec: number | null): string | null {
-  if (!sec || sec <= 0) return null;
-  const unit = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
-  if (sec % 86400 === 0) return unit(sec / 86400, 'day');
-  if (sec % 3600 === 0) return unit(sec / 3600, 'hour');
-  return unit(Math.round(sec / 60), 'minute');
+  data_limit_mb?: number | null;
 }
 
 interface Location {
@@ -39,119 +36,155 @@ interface PortalClientProps {
   loginUrl: string | null;
 }
 
+
 export default function PortalClient({ mac, ip, routerId, location, plans, loginUrl }: PortalClientProps) {
-  const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string>(plans[0]?.id || '');
   const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const selectedPlan = plans.find(p => p.id === selectedPlanId);
-  const priceNaira = selectedPlan ? selectedPlan.price_kobo / 100 : 0;
+  const selected = plans.find((p) => p.id === selectedPlanId);
 
-  const triggerKoraPayment = async () => {
-    // 1. We removed the window.Korapay check here entirely
-    
-    if (!selectedPlan || !phone) {
-      alert("Please enter your phone number and select a plan.");
+  const pay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const cleaned = phone.trim();
+    if (!normaliseNigerianMobile(cleaned)) {
+      setPhoneError('Enter a Nigerian mobile number, for example 08031234567.');
       return;
     }
-
+    setPhoneError(null);
+    if (!selected) {
+      setError('Choose a plan first.');
+      return;
+    }
     setIsProcessing(true);
-    
     try {
-      // 2. We now call the secure backend action
       // The server prices the plan from the database; the browser sends no amount.
-      const result = await initializeKoraCheckout({
-        mac,
-        ip,
-        routerId,
-        locationId: location.id,
-        planId: selectedPlan.id,
-        phone
-      });
-
+      const result = await initializeKoraCheckout({ mac, ip, routerId, locationId: location.id, planId: selected.id, phone: cleaned });
       if (!result.ok) {
-        alert(result.error);
+        setError(result.error);
         setIsProcessing(false);
         return;
       }
-
-      // Redirect the user to the Kora-hosted payment page
-      window.location.href = result.checkoutUrl;
-    } catch (error) {
-      console.error("Checkout Error:", error);
-      alert("Unable to start payment. Please check your connection and try again.");
+      window.location.assign(result.checkoutUrl);
+    } catch {
+      setError('The payment page could not be opened. Check that you are still on the WiFi and try again.');
       setIsProcessing(false);
     }
   };
 
+  if (plans.length === 0) {
+    return (
+      <Notice tone="warn" title="No plans on sale here right now">
+        Ask the staff at {location.name}, or try again later.
+      </Notice>
+    );
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Connectly Wi-Fi</h1>
-          <p className="text-gray-500 text-sm mt-1">{location.name}</p>
-        </div>
-
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-            <input 
-              type="tel" 
-              placeholder="080XXXXXXXX"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#6d1825]"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Select a Plan</label>
-            <div className="space-y-3">
-              {plans.map((plan) => (
-                <label 
-                  key={plan.id} 
-                  className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-colors ${
-                    selectedPlanId === plan.id ? 'border-[#6d1825] bg-[#6d1825]/5' : 'border-gray-200 hover:border-gray-300'
-                  }`}
+    <div className="space-y-8">
+      <form onSubmit={pay} noValidate className="space-y-7">
+        <fieldset>
+          <legend className="text-xl font-bold tracking-[-0.01em] text-ink">Choose a plan</legend>
+          <p className="mt-1 text-sm text-muted">Pay once. No account, no subscription.</p>
+          <div className="mt-4 overflow-hidden rounded-[var(--radius-panel)] border border-line bg-surface">
+            {plans.map((plan, i) => {
+              const checked = plan.id === selectedPlanId;
+              const details = [planDuration(plan.duration_seconds), planData(plan.data_limit_mb), planDevices(plan.device_limit), planSpeed(plan.speed_down_mbps)].filter(Boolean);
+              return (
+                <label
+                  key={plan.id}
+                  className={cn(
+                    'relative flex cursor-pointer gap-3.5 px-4 py-4 transition-colors',
+                    i > 0 && 'border-t border-line',
+                    checked ? 'bg-brand-soft' : 'hover:bg-canvas'
+                  )}
                 >
-                  <div className="flex items-center gap-3">
-                    <input 
-                      type="radio" 
-                      name="plan"
-                      value={plan.id}
-                      checked={selectedPlanId === plan.id}
-                      onChange={(e) => setSelectedPlanId(e.target.value)}
-                      className="text-[#6d1825] focus:ring-[#6d1825]"
-                    />
-                    <span>
-                      <span className="block font-medium text-gray-900">{plan.name}</span>
-                      <span className="block text-xs text-gray-500">
-                        {[fmtDuration(plan.duration_seconds), plan.speed_down_mbps ? `up to ${plan.speed_down_mbps} Mbps` : null, (plan.device_limit ?? 1) > 1 ? `${plan.device_limit} devices` : null].filter(Boolean).join(' · ')}
-                      </span>
+                  {checked && <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />}
+                  <input
+                    type="radio"
+                    name="plan"
+                    value={plan.id}
+                    checked={checked}
+                    onChange={() => setSelectedPlanId(plan.id)}
+                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-brand)]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="text-base font-semibold text-ink">{plan.name}</span>
+                      <span className="tnum text-lg font-bold text-ink">{naira(plan.price_kobo / 100)}</span>
                     </span>
-                  </div>
-                  <span className="font-bold text-gray-900">₦{plan.price_kobo / 100}</span>
+                    <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-muted">
+                      {details.map((d) => <span key={d as string}>{d}</span>)}
+                    </span>
+                  </span>
                 </label>
-              ))}
-            </div>
+              );
+            })}
           </div>
+        </fieldset>
 
-          <button 
-            onClick={triggerKoraPayment}
-            disabled={isProcessing || !phone}
-            className="w-full bg-[#6d1825] text-white py-3.5 rounded-lg font-bold hover:bg-[#5a141e] disabled:opacity-50 transition-colors mt-4"
-          >
-            {isProcessing ? 'Connecting to secure gateway...' : `Pay ₦${priceNaira}`}
-          </button>
+        <Field
+          label="Your phone number"
+          htmlFor="phone"
+          error={phoneError}
+          hint="For your receipt and WiFi code by text. We do not use it for anything else."
+        >
+          <input
+            id="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="0803 123 4567"
+            value={phone}
+            onChange={(e) => { setPhone(e.target.value); setPhoneError(null); }}
+            className={inputClass}
+            aria-invalid={phoneError ? true : undefined}
+          />
+        </Field>
+
+        {error && <Notice tone="bad" title="Payment not started">{error}</Notice>}
+
+        <div className="sticky bottom-0 -mx-5 border-t border-line bg-surface/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
+          {selected && (
+            <p className="mb-3 text-sm text-muted">
+              <span className="font-semibold text-ink">{selected.name}</span>
+              {', '}
+              {[planDuration(selected.duration_seconds), planData(selected.data_limit_mb).toLowerCase(), planDevices(selected.device_limit)].filter(Boolean).join(', ')}
+            </p>
+          )}
+          <Button type="submit" size="lg" full disabled={isProcessing || !selected}>
+            {isProcessing ? 'Opening secure payment…' : `Pay ${selected ? naira(selected.price_kobo / 100) : ''}`}
+          </Button>
+          <p className="mt-2 text-center text-xs text-subtle">Secure payment by Korapay. You confirm the amount there.</p>
         </div>
+      </form>
 
-        {loginUrl && (
-          <div className="mt-8 border-t border-gray-100 pt-6">
-            <CodeLogin loginUrl={loginUrl} />
-          </div>
-        )}
-      </div>
-    </main>
+      {loginUrl && (
+        <section className="rounded-[var(--radius-panel)] border border-line bg-surface p-5">
+          <CodeLogin loginUrl={loginUrl} />
+        </section>
+      )}
+
+      <section aria-labelledby="how" className="text-sm">
+        <h2 id="how" className="font-semibold text-ink">How it works</h2>
+        <ol className="mt-3 space-y-3">
+          {[
+            ['Pay for a plan', 'Korapay opens a secure payment page. The price shown here is the price you pay.'],
+            ['Get your WiFi code', 'It appears on screen as soon as the payment is confirmed.'],
+            ['You are online', 'This phone is connected for you. Other devices sign in with the code.'],
+          ].map(([t, d], i) => (
+            <li key={t} className="flex gap-3">
+              <span className="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line-strong text-xs font-semibold text-muted">{i + 1}</span>
+              <span>
+                <span className="font-semibold text-ink">{t}.</span> <span className="text-muted">{d}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
   );
 }

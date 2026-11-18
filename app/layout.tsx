@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Schibsted_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { appEnv } from "@/lib/env";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const schibsted = Schibsted_Grotesk({
+  variable: "--font-schibsted",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -43,13 +44,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${schibsted.variable} ${geistMono.variable} h-full antialiased`}
     >
       {/* Head is automatically managed by Next.js */}
       <body className="min-h-full flex flex-col">
         {appEnv() !== "production" && (
-          <div className="w-full bg-amber-400 text-black text-center text-xs font-bold py-1 tracking-wide">
-            {appEnv().toUpperCase()} ENVIRONMENT: test data and sandbox payments only
+          <div className="w-full border-b border-warn/20 bg-warn-soft px-4 py-1.5 text-center text-xs font-semibold text-warn">
+            {appEnv() === 'preview' ? 'Staging' : 'Local'}: test data and sandbox payments only
           </div>
         )}
         {children}

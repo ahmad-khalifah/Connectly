@@ -353,6 +353,18 @@ describe('GET /api/purchase/status (what the customer sees after paying)', () =>
     fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'active', purchases: null }, 'paid', null));
     expect((await get()).access.connectUrl).toMatch(/^http:\/\/wifi\.getconnectly\.net\/login\?/);
   });
+  it('offers a way back to the plans on the same WiFi after a failed payment, never after a paid one', async () => {
+    const withRouter = (status: string, mac: string): Handler => (op) =>
+      op.table === 'purchases'
+        ? { data: { id: 'p1', router_id: ROUTER, status, created_at: new Date().toISOString(), expires_at: null, amount_kobo: 25000, mac_address: mac, plans: { name: 'Day' }, locations: { name: 'Garki' }, routers: { identifier: 'cx-garki-01' } }, error: null }
+        : { data: null, error: null };
+    fake = createFakeDb(withRouter('failed', 'AA:BB:CC:DD:EE:FF'));
+    expect((await get()).retryPath).toBe('/portal?router=cx-garki-01&mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF');
+    fake = createFakeDb(withRouter('failed', '00:00:00:00:00:00'));
+    expect((await get()).retryPath).toBeNull();
+    fake = createFakeDb(withRouter('paid', 'AA:BB:CC:DD:EE:FF'));
+    expect((await get()).retryPath).toBeNull();
+  });
   it('reveals no voucher before the payment is confirmed', async () => {
     fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'active', purchases: null }, 'pending'));
     const body = await get();

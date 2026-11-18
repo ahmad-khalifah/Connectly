@@ -1,15 +1,75 @@
 @import "tailwindcss";
 
+/*
+ * Connectly design tokens.
+ * Brand: maroon and ochre from the logo. Indigo is the consultancy's own
+ * accent (one brand, two offerings). Neutrals are cool slate so the maroon
+ * stays the only warm colour on screen.
+ */
+@theme {
+  --font-sans: var(--font-schibsted), ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand: #6b1420;
+  --color-brand-strong: #520f18;
+  --color-brand-soft: #f6e9eb;
+  --color-ochre: #d9a441;
+  --color-ochre-soft: #fbf3e2;
+  --color-indigo: #24335f;
+  --color-indigo-strong: #1a2547;
+  --color-indigo-soft: #e9ecf4;
+
+  --color-ink: #1f2430;
+  --color-muted: #5a6070;
+  --color-subtle: #868c9a;
+  --color-line: #dde0e6;
+  --color-line-strong: #c4c8d1;
+  --color-canvas: #f3f4f6;
+  --color-surface: #ffffff;
+
+  --color-ok: #1e7a4c;
+  --color-ok-soft: #e7f4ec;
+  --color-warn: #8f5a07;
+  --color-warn-soft: #fdf3e1;
+  --color-bad: #b42318;
+  --color-bad-soft: #fdecea;
+
+  --radius-control: 8px;
+  --radius-panel: 12px;
+}
+
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings: "ss01" on;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Kept for the existing landing page until it is replaced. */
 @keyframes pan {
   0% { transform: scale(1.05) translate(0, 0); }
   100% { transform: scale(1.1) translate(-2%, 2%); }
 }
-
 .animate-slow-pan {
   animation: pan 30s linear infinite alternate;
 }

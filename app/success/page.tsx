@@ -1,4 +1,6 @@
 import PaymentStatus from './payment-status';
+import { PortalShell } from '@/components/portal/portal-shell';
+import { Notice } from '@/components/ui/notice';
 
 // Korapay redirects the customer here after checkout. The redirect itself
 // proves nothing; the status shown comes from our ledger, which only a
@@ -12,25 +14,22 @@ export default async function SuccessPage({
   // receive the parameter twice (found on staging, 18 Nov). Use ours: CONN_<uuid>.
   const raw = (await searchParams).reference;
   const reference = (Array.isArray(raw) ? raw : [raw]).find((r): r is string => typeof r === 'string' && /^CONN_[0-9a-f-]{36}$/i.test(r));
-  const valid = Boolean(reference);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
-        {valid ? (
-          <PaymentStatus reference={reference!} />
-        ) : (
-          <>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">No payment reference</h1>
-            <p className="text-gray-600">Return to the Wi-Fi page to choose a plan.</p>
-          </>
-        )}
-        {valid && (
-          <p className="mt-6 text-xs text-gray-500">
-            Payment reference: <span className="font-mono text-gray-700 break-all">{reference}</span>
+    <PortalShell>
+      {reference ? (
+        <>
+          <PaymentStatus reference={reference} />
+          <p className="mt-8 border-t border-line pt-4 text-[13px] text-muted">
+            Payment reference
+            <span className="mt-0.5 block break-all font-semibold text-ink">{reference}</span>
           </p>
-        )}
-      </div>
-    </main>
+        </>
+      ) : (
+        <Notice tone="warn" title="No payment reference">
+          Join the Connectly WiFi to choose a plan. If you have paid, open the link from your payment again.
+        </Notice>
+      )}
+    </PortalShell>
   );
 }
