@@ -1,131 +1,82 @@
+import Link from 'next/link';
 import { appUrl } from '@/lib/env';
 import { db } from '@/lib/db/client';
-import { MapPin, Router, Wifi, TrendingUp, Users, Plus, QrCode, ExternalLink } from 'lucide-react';
-import Link from 'next/link';
+import { requestTime } from '@/lib/time';
+import { PageHeader } from '@/components/admin/page-header';
+import { EmptyRow, TableFrame, td, th, tr } from '@/components/admin/table';
+import { ButtonLink } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Notice } from '@/components/ui/notice';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LocationsDirectoryPage() {
-  const { data: locations } = await db
+type Loc = {
+  id: string; name: string; slug: string; status: string | null; is_active: boolean | null;
+  institutions: { name: string } | { name: string }[] | null;
+  routers: { id: string; status: string | null; lifecycle_status: string }[] | null;
+  purchases: { status: string; amount_paid: number | null; amount_kobo: number | null; network_authorizations: { status: string; revoked_at: string | null; expires_at: string }[] | null }[] | null;
+};
+
+export default async function LocationsPage() {
+  const { data, error } = await db
     .from('locations')
-    .select(`
-      id,
-      name,
-      slug,
-      status,
-      is_active,
-      institutions(name),
-      routers(id),
-      access_points(id),
-      purchases(status, amount_paid, net_amount_ngn, network_authorizations(status, revoked_at, expires_at))
-    `)
+    .select('id, name, slug, status, is_active, institutions(name), routers(id, status, lifecycle_status), purchases(status, amount_paid, amount_kobo, network_authorizations(status, revoked_at, expires_at))')
     .order('name', { ascending: true });
 
-  const formattedLocations = locations?.map(loc => {
-    // Paid codes live on this location's routers right now (on the router, not ended, not revoked).
-    const now = Date.now();
-    const activeSessions = ((loc.purchases as { network_authorizations?: { status: string; revoked_at: string | null; expires_at: string }[] | null }[]) ?? [])
-      .flatMap((p) => p.network_authorizations ?? [])
-      .filter((g) => g.status === 'active' && !g.revoked_at && Date.parse(g.expires_at) > now).length;
-    // Gross takings from verified payments only (pending and failed purchases are excluded).
-    const revenue = ((loc.purchases as { status: string; amount_paid: number | null; net_amount_ngn: number | null }[]) ?? [])
-      .filter((p) => p.status === 'paid')
-      .reduce((acc, p) => acc + Number(p.amount_paid || p.net_amount_ngn || 0), 0);
-    
-    // Evaluate the array vs object mismatch from Supabase generated types
-    const inst = loc.institutions as { name: string } | { name: string }[] | null;
-    const institutionName = Array.isArray(inst) ? inst[0]?.name : inst?.name;
-    
-    return {
-      ...loc,
-      activeSessions,
-      revenue,
-      routerCount: (loc.routers as unknown[] | null)?.length || 0,
-      apCount: (loc.access_points as unknown[] | null)?.length || 0,
-      institutionName: institutionName || 'Independent Facility',
-    };
-  }) || [];
-
-  const portalBase = appUrl();
+  const now = requestTime();
+  const rows = ((data ?? []) as unknown as Loc[]).map((l) => {
+    const purchases = l.purchases ?? [];
+    const running = purchases.flatMap((p) => p.network_authorizations ?? []).filter((g) => (g.status === 'active' || g.status === 'pending_device') && !g.revoked_at && Date.parse(g.expires_at) > now).length;
+    const revenue = purchases.filter((p) => p.status === 'paid').reduce((s, p) => s + (p.amount_paid !== null ? Number(p.amount_paid) : (p.amount_kobo ?? 0) / 100), 0);
+    const active = (l.routers ?? []).filter((r) => r.lifecycle_status === 'active');
+    const inst = Array.isArray(l.institutions) ? l.institutions[0] : l.institutions;
+    return { ...l, running, revenue, routersOnline: active.filter((r) => r.status === 'online').length, routersActive: active.length, routersTotal: (l.routers ?? []).filter((r) => r.lifecycle_status !== 'retired').length, institution: inst?.name ?? null };
+  });
+  const base = appUrl();
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <MapPin className="h-6 w-6 text-[#6d1825]" /> Facilities & Campuses
-          </h1>
-          <p className="text-sm text-slate-500">Manage physical network zones, infrastructure deployment, and localized revenue.</p>
-        </div>
-        <Link 
-          href="/admin/locations/new" 
-          className="flex items-center gap-2 px-4 py-2 bg-[#6d1825] text-white text-sm font-semibold rounded-lg hover:bg-[#5a141e] transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Add Facility
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {formattedLocations.map((location) => {
-          const connectUrl = `${portalBase}/connect?loc=${location.slug}`;
-
-          return (
-            <div key={location.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs relative flex flex-col">
-              <div className="absolute top-4 right-4 flex gap-1">
-                {location.is_active === false && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase border bg-slate-100 text-slate-500 border-slate-200">Not selling</span>
-                )}
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
-                  location.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
-                }`}>
-                  {location.status}
-                </span>
-              </div>
-              
-              <Link href={`/admin/locations/${location.id}`} className="block group mb-4">
-                <h2 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-[#6d1825] transition-colors flex items-center gap-2">
-                  {location.name} <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </h2>
-                <p className="text-xs text-slate-500">{location.institutionName}</p>
-              </Link>
-
-              <div className="space-y-3 pt-4 border-t border-slate-100 flex-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-600"><Users className="h-4 w-4 text-slate-400"/> Live paid codes</span>
-                  <span className="font-mono font-bold text-slate-900">{location.activeSessions}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-600"><TrendingUp className="h-4 w-4 text-emerald-500"/> Paid revenue</span>
-                  <span className="font-mono font-bold text-slate-900">₦{location.revenue.toLocaleString('en-NG')}</span>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500 mb-4">
-                <span className="flex items-center gap-1"><Router className="h-3 w-3" /> {location.routerCount} Nodes</span>
-                <span className="flex items-center gap-1"><Wifi className="h-3 w-3" /> {location.apCount} APs</span>
-              </div>
-
-              <div className="mt-auto bg-slate-50 -mx-6 -mb-6 p-4 border-t border-slate-200 flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Portal Entry</span>
-                <a 
-                  href={connectUrl} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="flex items-center gap-1.5 text-xs font-bold text-[#cfa253] hover:text-[#6d1825] transition-colors"
-                >
-                  <QrCode className="h-3.5 w-3.5" /> /{location.slug}
-                </a>
-              </div>
-            </div>
-          );
-        })}
-
-        {formattedLocations.length === 0 && (
-          <div className="col-span-full p-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
-            No facilities configured. Create a location to map infrastructure.
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Locations"
+        description="Each site Connectly serves: its routers, the plans running there and what it has taken."
+        actions={<ButtonLink href="/admin/locations/new">New location</ButtonLink>}
+      />
+      {error && <Notice tone="bad" title="Locations could not be loaded">The database did not answer. Refresh to try again.</Notice>}
+      <TableFrame>
+        <thead>
+          <tr>
+            <th className={th}>Location</th>
+            <th className={th}>Selling</th>
+            <th className={th}>Routers online</th>
+            <th className={`${th} text-right`}>Plans running now</th>
+            <th className={`${th} text-right`}>Paid revenue, all time</th>
+            <th className={th}>Information link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((l) => (
+            <tr key={l.id} className={tr}>
+              <td className={td}>
+                <Link href={`/admin/locations/${l.id}`} className="font-semibold text-ink hover:text-brand">{l.name}</Link>
+                {l.institution && <span className="block text-[12.5px] text-muted">{l.institution}</span>}
+              </td>
+              <td className={td}>{l.is_active === false ? <Badge>Not selling</Badge> : <Badge tone="ok">Selling</Badge>}</td>
+              <td className={`${td} tnum`}>
+                {l.routersActive ? (
+                  <span className={l.routersOnline < l.routersActive ? 'font-semibold text-bad' : ''}>{l.routersOnline} of {l.routersActive}</span>
+                ) : <span className="text-muted">{l.routersTotal ? `${l.routersTotal} not active yet` : 'None'}</span>}
+              </td>
+              <td className={`${td} tnum text-right`}>{l.running}</td>
+              <td className={`${td} tnum text-right`}>₦{l.revenue.toLocaleString('en-NG')}</td>
+              <td className={`${td} text-[13px]`}>
+                <a href={`${base}/connect?loc=${l.slug}`} target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">/connect?loc={l.slug}</a>
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && <EmptyRow cols={6}>No locations yet. Create one, then register its router.</EmptyRow>}
+        </tbody>
+      </TableFrame>
+      <p className="text-[13px] text-muted">The information link is for posters and QR codes: it tells people to join the WiFi. Plans are bought on the WiFi sign-in page, which knows the router.</p>
     </div>
   );
 }
