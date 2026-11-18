@@ -6,7 +6,7 @@ import { LensMark } from '@/components/ui/lens-mark';
 import { buttonClass } from '@/components/ui/button';
 
 export const metadata: Metadata = {
-  title: 'Managed WiFi | Connectly',
+  title: 'Managed WiFi | Connectly Networks',
   description: 'Paid WiFi for markets, campuses, hostels and estates, designed, installed and run by Connectly. Customers pay on their phone and are online in seconds.',
 };
 
@@ -51,9 +51,9 @@ export default function WifiPage() {
           </div>
         </section>
 
-        <section aria-labelledby="journey" className="border-b border-line bg-canvas">
+        <section id="journey" aria-labelledby="journey-title" className="scroll-mt-20 border-b border-line bg-canvas">
           <div className="mx-auto max-w-6xl px-5 py-16 sm:px-8">
-            <h2 id="journey" className="text-[28px] font-bold tracking-[-0.02em] text-ink">How customers get online</h2>
+            <h2 id="journey-title" className="text-[28px] font-bold tracking-[-0.02em] text-ink">How customers get online</h2>
             <ol className="mt-10 grid gap-10 md:grid-cols-3">
               {STEPS.map(([title, text, state], i) => (
                 <li key={title} className="flex gap-4">
@@ -113,7 +113,7 @@ export default function WifiPage() {
               <h2 id="enquire-title" className="text-[28px] font-bold tracking-[-0.02em] text-ink">WiFi for your site</h2>
               <p className="mt-3 text-[17px] leading-relaxed text-muted">Tell us about the place. We will come back with questions, and then a visit.</p>
             </div>
-            <EnquiryForm kind="wifi" />
+            <EnquiryForm />
           </div>
         </section>
       </main>

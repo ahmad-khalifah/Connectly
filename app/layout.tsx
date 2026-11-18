@@ -15,11 +15,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Connectly Technologies',
-  description: 'Connectly builds and runs paid WiFi for markets, campuses and estates, and helps companies enter and grow in Northern Nigeria.',
-  keywords: ['WiFi management', 'captive portal', 'Abuja', 'Nigeria', 'hotspot billing', 'internet connectivity', 'hotspot billing'],
+  title: 'Connectly Networks',
+  description: 'Connectly Networks designs, installs and runs paid WiFi for markets, campuses, hostels and estates in Northern Nigeria.',
+  keywords: ['managed WiFi', 'paid WiFi', 'hotspot', 'Abuja', 'Northern Nigeria', 'internet connectivity'],
   openGraph: {
-    title: 'Connectly Technologies',
+    title: 'Connectly Networks',
     description: 'Reliable internet connectivity infrastructure and automated hotspot management.',
     url: 'https://getconnectly.net',
     siteName: 'Connectly',

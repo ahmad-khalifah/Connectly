@@ -11,7 +11,7 @@ export function SiteFooter() {
         <div>
           <Wordmark />
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted">
-            Connectly Technologies Ltd builds and runs WiFi networks, and advises companies working in Northern Nigeria.
+            Connectly Networks designs, installs and runs paid WiFi for markets, campuses, hostels and estates. A Connectly Technologies Ltd business.
           </p>
           <p className="mt-4 text-[13px] leading-relaxed text-subtle">RC 9843504<br />Abuja, Nigeria</p>
         </div>
@@ -19,7 +19,7 @@ export function SiteFooter() {
           <h2 className="text-sm font-semibold text-ink">What we do</h2>
           <ul className="mt-3 space-y-2 text-sm text-muted">
             <li><Link href="/wifi" className="hover:text-brand">Managed WiFi</Link></li>
-            <li><Link href="/consultancy" className="hover:text-indigo">Connectly Consultancy</Link></li>
+            <li><Link href="/wifi#enquire" className="hover:text-brand">Enquire about your site</Link></li>
           </ul>
         </div>
         <div>

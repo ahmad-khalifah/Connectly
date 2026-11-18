@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { enquiryTicket, parseEnquiry } from '@/lib/enquiries';
 
-// Public: the website's enquiry forms. Stores the enquiry as a support ticket
+// Public: the website's site enquiry form. Stores the enquiry as a support ticket
 // and returns its number. No personal data is returned.
 export async function POST(req: Request) {
   const len = Number(req.headers.get('content-length') ?? 0);

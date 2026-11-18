@@ -6,17 +6,16 @@ let fake: ReturnType<typeof createFakeDb>;
 vi.mock('@/lib/db/client', () => ({ get db() { return fake.db; } }));
 
 const NOW = 1_800_000_000_000;
-const wifi = { kind: 'wifi', name: 'Amina Bello', organisation: 'Kofar Market Traders', email: 'Amina@Example.com', phone: '0803 123 4567', message: 'We want paid WiFi for 300 shops.', siteType: 'Market or shopping centre', siteLocation: 'Kano', users: '500 to 2,000 people a day', startedAt: NOW - 30_000 };
-const consult = { kind: 'consultancy', name: 'Tom Reid', organisation: 'Acme Payments', email: 'tom@acme.com', message: 'Entering Kano and Kaduna next year.', sector: 'Financial services and payments', needs: ['Market entry strategy', 'Not a real need'], regions: 'Kano, Kaduna', timeline: '6 to 12 months', startedAt: NOW - 30_000 };
+const wifi = { name: 'Amina Bello', organisation: 'Kofar Market Traders', email: 'Amina@Example.com', phone: '0803 123 4567', message: 'We want paid WiFi for 300 shops.', siteType: 'Market or shopping centre', siteLocation: 'Kano', users: '500 to 2,000 people a day', startedAt: NOW - 30_000 };
 
 describe('parseEnquiry', () => {
   it('accepts a WiFi enquiry and tidies it', () => {
     const r = parseEnquiry(wifi, NOW);
-    expect(r).toMatchObject({ ok: true, value: { kind: 'wifi', email: 'amina@example.com', siteType: 'Market or shopping centre', users: '500 to 2,000 people a day' } });
+    expect(r).toMatchObject({ ok: true, value: { email: 'amina@example.com', siteType: 'Market or shopping centre', users: '500 to 2,000 people a day' } });
   });
-  it('keeps only known consultancy needs', () => {
-    const r = parseEnquiry(consult, NOW);
-    expect(r.ok && r.value.needs).toEqual(['Market entry strategy']);
+  it('drops choices that are not on the list', () => {
+    const r = parseEnquiry({ ...wifi, siteType: 'Spaceport', users: 'lots' }, NOW);
+    expect(r.ok && [r.value.siteType, r.value.users]).toEqual([undefined, undefined]);
   });
   it('treats a filled hidden field or an instant post as spam', () => {
     expect(parseEnquiry({ ...wifi, website: 'http://spam' }, NOW)).toEqual({ ok: false, spam: true });
@@ -34,11 +33,11 @@ describe('parseEnquiry', () => {
     expect(r).toMatchObject({ ok: false, field });
   });
   it('turns an enquiry into a tagged support ticket', () => {
-    const r = parseEnquiry(consult, NOW);
+    const r = parseEnquiry({ ...wifi, phone: '' }, NOW);
     if (!r.ok) throw new Error('should parse');
     const t = enquiryTicket(r.value);
-    expect(t.subject).toBe('[Consultancy] Acme Payments');
-    expect(t.description).toContain('Help with: Market entry strategy');
+    expect(t.subject).toBe('[WiFi for your site] Kofar Market Traders');
+    expect(t.description).toContain('Where: Kano');
     expect(t.description).toContain('Phone: not given');
   });
 });

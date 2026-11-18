@@ -34,7 +34,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
     <div className="space-y-6">
       <PageHeader
         title="Support"
-        description="Customer problems and enquiries from the website. Enquiries arrive with their subject starting [Consultancy] or [WiFi for your site]."
+        description="Customer problems and enquiries from the website. Site enquiries arrive with their subject starting [WiFi for your site]."
       />
       <nav aria-label="Ticket status" className="inline-flex flex-wrap rounded-[var(--radius-control)] border border-line bg-surface p-0.5">
         {FILTERS.map((f) => (
