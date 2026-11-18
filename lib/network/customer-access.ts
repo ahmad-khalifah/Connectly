@@ -13,6 +13,8 @@ export type CustomerAccess = {
   ended: boolean;
   devices: number;
   loginUrl: string;
+  /** The controller logged the paying device in by itself (no login page needed). */
+  online: boolean;
 };
 
 /** The hotspot's login page as customers' devices see it, e.g. http://wifi.getconnectly.net/login. */
@@ -39,14 +41,26 @@ export async function accessForPurchase(purchaseId: string, routerId: string | n
   if (!routerId) return null;
   const { data: grant } = await db
     .from('network_authorizations')
-    .select('voucher_code, status, purchases(plans(device_limit))')
+    .select('id, voucher_code, status, purchases(plans(device_limit))')
     .eq('purchase_id', purchaseId)
     .eq('router_id', routerId)
     .maybeSingle();
   if (!grant?.voucher_code) return null;
   const purchase = (Array.isArray(grant.purchases) ? grant.purchases[0] : grant.purchases) as { plans?: unknown } | null;
   const plan = (Array.isArray(purchase?.plans) ? purchase.plans[0] : purchase?.plans) as { device_limit?: number | null } | null;
+  // The provisioning job reports whether it logged the paying device in (controller: logInPayingDevice).
+  const { data: job } = await db
+    .from('controller_jobs')
+    .select('result')
+    .eq('authorization_id', grant.id)
+    .eq('kind', 'access.provision')
+    .eq('status', 'succeeded')
+    .order('finished_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const login = (job?.result as { auto_login?: { status?: string } } | null)?.auto_login?.status;
   return {
+    online: login === 'logged_in' || login === 'already_online',
     voucher: String(grant.voucher_code),
     ready: grant.status === 'active',
     ended: grant.status === 'revoked' || grant.status === 'expired',

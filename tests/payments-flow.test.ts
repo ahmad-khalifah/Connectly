@@ -304,7 +304,9 @@ describe('GET /api/purchase/status (what the customer sees after paying)', () =>
     const { GET } = await import('@/app/api/purchase/status/route');
     return (await GET(new Request(`http://x/api/purchase/status?reference=${REF2}`))).json();
   };
-  const world = (grant: object | null, purchaseStatus = 'paid', dns: string | null = 'wifi.garki.example'): Handler => (op) => {
+  const world = (grant: object | null, purchaseStatus = 'paid', dns: string | null = 'wifi.garki.example', autoLogin: string | null = null, sms: string | null = 'failed'): Handler => (op) => {
+    if (op.table === 'controller_jobs') return { data: autoLogin ? { result: { auto_login: { status: autoLogin } } } : null, error: null };
+    if (op.table === 'notifications') return { data: sms ? { status: sms } : null, error: null };
     if (op.table === 'purchases') return { data: { id: 'p1', router_id: ROUTER, status: purchaseStatus, created_at: new Date().toISOString(), expires_at: '2026-11-18T10:00:00Z', amount_kobo: 25000, plans: { name: 'Day' }, locations: { name: 'Garki' } }, error: null };
     if (op.table === 'network_authorizations') return { data: grant, error: null };
     if (op.table === 'router_hotspot_settings') return { data: dns ? { dns_name: dns } : null, error: null };
@@ -315,9 +317,13 @@ describe('GET /api/purchase/status (what the customer sees after paying)', () =>
     fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'active', purchases: { plans: { device_limit: 2 } } }));
     const body = await get();
     expect(body.access).toEqual({
-      voucher: 'K7M2Q9XP', ready: true, ended: false, devices: 2,
+      voucher: 'K7M2Q9XP', ready: true, ended: false, devices: 2, online: false, sms: 'failed',
       connectUrl: 'http://wifi.garki.example/login?username=K7M2Q9XP&password=K7M2Q9XP&dst=https%3A%2F%2Fgetconnectly.net',
     });
+  });
+  it('says the paying device is online when the controller logged it in', async () => {
+    fake = createFakeDb(world({ id: 'g1', voucher_code: 'K7M2Q9XP', status: 'active', purchases: null }, 'paid', null, 'logged_in', 'sent'));
+    expect((await get()).access).toMatchObject({ online: true, sms: 'sent' });
   });
   it('says "not ready" while the controller has not added it yet', async () => {
     fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'pending_device', purchases: null }));

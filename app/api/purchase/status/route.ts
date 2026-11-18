@@ -62,5 +62,10 @@ export async function GET(request: Request) {
 async function accessView(purchaseId: string, routerId: string | null) {
   const a = await accessForPurchase(purchaseId, routerId);
   if (!a) return null;
-  return { voucher: a.voucher, ready: a.ready, ended: a.ended, devices: a.devices, connectUrl: connectLink(a.loginUrl, a.voucher) };
+  const { data: sms } = await db.from('notifications').select('status').eq('purchase_id', purchaseId).eq('template', 'payment_confirmed').maybeSingle();
+  return {
+    voucher: a.voucher, ready: a.ready, ended: a.ended, devices: a.devices, online: a.online,
+    sms: (sms?.status as 'sent' | 'failed' | 'queued' | undefined) ?? 'none',
+    connectUrl: connectLink(a.loginUrl, a.voucher),
+  };
 }

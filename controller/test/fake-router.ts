@@ -83,6 +83,12 @@ class FakeClient implements RouterClient {
   async list(path: string, query: Record<string, string> = {}) {
     this.call(`list ${path}`);
     if (path === '/ip/dns') return this.r.dns as unknown as Record<string, string>[];
+    if (path === '/ip/hotspot/active') {
+      // One store for sessions, whichever way they are read (listActive or the generic menu).
+      return [...this.r.active.values()]
+        .map((a) => ({ '.id': a.id, user: a.user, address: a.address ?? '', 'mac-address': a.macAddress ?? '' }))
+        .filter((row) => Object.entries(query).every(([k, v]) => (row as Record<string, string>)[k] === v));
+    }
     return this.menu(path).filter((row) => Object.entries(query).every(([k, v]) => row[k] === v)).map((row) => ({ ...row }));
   }
   async add(path: string, fields: Record<string, string>) {
@@ -110,6 +116,15 @@ class FakeClient implements RouterClient {
   async command(path: string, fields: Record<string, string>) {
     this.call(`command ${path}`);
     if (path === '/ip/dns/set') Object.assign(this.r.dns, fields);
+    if (path === '/ip/hotspot/active/login') {
+      // Like RouterOS: the user must exist with that password, and the device must be a known hotspot host.
+      const u = this.r.users.get(fields.user!);
+      if (!u || u.password !== fields.password) throw new RouterError('protocol', 'invalid username or password', 400);
+      const host = this.menu('/ip/hotspot/host').find((h) => h['mac-address'] === fields['mac-address'] && h.address === fields.ip);
+      if (!host) throw new RouterError('protocol', 'no such host', 400);
+      const id = this.r.nextId();
+      this.r.active.set(id, { id, user: fields.user!, address: fields.ip!, macAddress: fields['mac-address']! });
+    }
     if (path.endsWith('/move')) {
       // RouterOS: move item `numbers` to just before item `destination`.
       const m = this.menu(path.slice(0, -'/move'.length));

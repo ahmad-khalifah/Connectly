@@ -50,6 +50,8 @@ export type GrantRow = {
   speed_up_mbps: number | null;
   device_limit: number | null;
   data_limit_mb: string | null;
+  /** The paying device's hardware address, as the portal saw it (null when unknown). */
+  device_mac: string | null;
 };
 
 const ROUTER_COLUMNS = `id, name, identifier, location_id, connection_method, lifecycle_status, status,
@@ -148,10 +150,12 @@ export class Db {
   async getGrant(id: string): Promise<GrantRow | null> {
     const { rows } = await this.pool.query<GrantRow>(
       `select a.id, a.purchase_id, a.router_id, a.status, a.expires_at, a.voucher_code, a.hotspot_username, a.revoked_at,
-              p.plan_id, pl.speed_down_mbps, pl.speed_up_mbps, pl.device_limit, pl.data_limit_mb
+              p.plan_id, pl.speed_down_mbps, pl.speed_up_mbps, pl.device_limit, pl.data_limit_mb,
+              d.mac_address::text as device_mac
          from public.network_authorizations a
          left join public.purchases p on p.id = a.purchase_id
          left join public.plans pl on pl.id = p.plan_id
+         left join public.devices d on d.id = a.device_id
         where a.id = $1`, [id]);
     return rows[0] ?? null;
   }

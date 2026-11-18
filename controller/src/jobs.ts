@@ -123,10 +123,42 @@ async function provision(job: Job, router: RouterRow, ctx: JobContext): Promise<
     }
     const response = { hotspot_user_id: userId, username: grant.hotspot_username, profile: profile.name, limit_uptime: fields.limitUptime, updated: Boolean(existing) };
     await ctx.db.markProvisioned(grant.id, profile.rateLimit, response);
-    return { ok: true, result: { provisioned: true, username: grant.hotspot_username }, routerResponse: response };
+    // The code is on the router: now log the paying device in, so the customer
+    // is online without visiting the router's (plain HTTP) login page.
+    const autoLogin = await logInPayingDevice(client, grant);
+    return { ok: true, result: { provisioned: true, username: grant.hotspot_username, auto_login: autoLogin }, routerResponse: { ...response, auto_login: autoLogin } };
   } catch (e) {
     if (e instanceof RouterError || e instanceof KeyError) await ctx.db.recordGrantError(grant.id, e.message);
     return failure(e);
+  }
+}
+
+export type AutoLogin =
+  | { status: 'logged_in'; ip: string }
+  | { status: 'already_online' }
+  | { status: 'device_not_seen' }
+  | { status: 'no_device' }
+  | { status: 'failed'; error: string };
+
+/**
+ * Logs the device that paid into the hotspot with its code, using the
+ * router's own record of that device (/ip/hotspot/host: hardware address ->
+ * current address). Best effort: the code is already on the router, so a
+ * failure here leaves the customer with the code and the Connect button, and
+ * never fails or repeats the provisioning job.
+ */
+export async function logInPayingDevice(client: RouterClient, grant: GrantRow): Promise<AutoLogin> {
+  if (!grant.device_mac || !grant.hotspot_username || !grant.voucher_code) return { status: 'no_device' };
+  const mac = grant.device_mac.toUpperCase();
+  try {
+    if ((await client.list('/ip/hotspot/active', { 'mac-address': mac })).length > 0) return { status: 'already_online' };
+    const [host] = await client.list('/ip/hotspot/host', { 'mac-address': mac });
+    if (!host?.address) return { status: 'device_not_seen' };
+    await client.command('/ip/hotspot/active/login', { user: grant.hotspot_username, password: grant.voucher_code, 'mac-address': mac, ip: host.address });
+    const ok = (await client.list('/ip/hotspot/active', { 'mac-address': mac })).some((a) => a.user === grant.hotspot_username);
+    return ok ? { status: 'logged_in', ip: host.address } : { status: 'failed', error: 'The router accepted the login but shows no session.' };
+  } catch (e) {
+    return { status: 'failed', error: e instanceof Error ? e.message : String(e) };
   }
 }
 

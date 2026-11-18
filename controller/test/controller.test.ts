@@ -131,6 +131,41 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.equal(g.rate_limit_rule, '3M/10M');
   });
 
+  test('paying device is logged in automatically when the router knows it; the code remains for other devices', async () => {
+    const r = await register('cx-site-auto', 'active');
+    // The router has seen the paying phone on the hotspot (portal recorded aa:bb:cc:dd:ee:01).
+    r.fake.menus.set('/ip/hotspot/host', [{ '.id': '*H1', 'mac-address': 'AA:BB:CC:DD:EE:01', address: '10.10.0.57' }]);
+    const p = await paidPurchase(t.admin, r.id);
+    await drain();
+    const j = (await t.admin.query(`select status, result from controller_jobs where authorization_id = $1 and kind = 'access.provision'`, [p.grantId])).rows[0];
+    assert.equal(j.status, 'succeeded');
+    assert.deepEqual(j.result.auto_login, { status: 'logged_in', ip: '10.10.0.57' });
+    const sessions = [...r.fake.active.values()].filter((a) => a.user === p.voucher);
+    assert.deepEqual(sessions.map((a) => [a.address, a.macAddress]), [['10.10.0.57', 'AA:BB:CC:DD:EE:01']]);
+
+    // Running the job again (reconcile, retry) does not log in twice.
+    await t.admin.query(`select enqueue_job('access.provision', $1, $2, '{}', $3, 'test')`, [r.id, p.grantId, `again:${p.grantId}`]);
+    await drain();
+    const again = (await t.admin.query(`select result from controller_jobs where idempotency_key = $1`, [`again:${p.grantId}`])).rows[0];
+    assert.deepEqual(again.result.auto_login, { status: 'already_online' });
+    assert.equal([...r.fake.active.values()].filter((a) => a.user === p.voucher).length, 1);
+
+    // Revoking ends the automatic session too.
+    await t.admin.query(`select enqueue_job('access.revoke', $1, $2, '{"reason":"admin"}', $3, 'test')`, [r.id, p.grantId, `revoke:${p.grantId}`]);
+    await drain();
+    assert.equal([...r.fake.active.values()].filter((a) => a.user === p.voucher).length, 0);
+  });
+
+  test('auto-login: device not on the hotspot yet leaves the code and does not fail the job', async () => {
+    const r = await register('cx-site-auto2', 'active');
+    const p = await paidPurchase(t.admin, r.id);
+    await drain();
+    const j = (await t.admin.query(`select status, result from controller_jobs where authorization_id = $1 and kind = 'access.provision'`, [p.grantId])).rows[0];
+    assert.equal(j.status, 'succeeded');
+    assert.deepEqual(j.result.auto_login, { status: 'device_not_seen' });
+    assert.ok(r.fake.users.get(p.voucher), 'code is on the router for the customer to use');
+  });
+
   test('crash mid-job: the job is reclaimed after 5 minutes and repeating it creates no duplicate', async () => {
     const r = await register('cx-site-02', 'active');
     const p = await paidPurchase(t.admin, r.id);

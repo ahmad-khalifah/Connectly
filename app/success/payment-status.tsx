@@ -9,7 +9,7 @@ type Status = {
   locationName?: string | null;
   amountNaira?: number | null;
   expiresAt?: string | null;
-  access?: { voucher: string; ready: boolean; ended: boolean; devices: number; connectUrl: string } | null;
+  access?: { voucher: string; ready: boolean; ended: boolean; devices: number; online?: boolean; sms?: 'sent' | 'failed' | 'queued' | 'none'; connectUrl: string } | null;
 };
 
 /** Paid, but the controller has not put the voucher on the router yet: keep polling. */
@@ -85,16 +85,24 @@ export default function PaymentStatus({ reference }: { reference: string }) {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your WiFi code</p>
               <p className="mt-1 font-mono text-3xl font-bold tracking-widest text-gray-900" data-testid="voucher">{a.voucher}</p>
               <p className="mt-1 text-xs text-slate-500">
-                Also sent to your phone. Use it as both username and password
-                {a.devices > 1 ? ` on up to ${a.devices} devices` : ''}.
+                Use it as both username and password{a.devices > 1 ? ` on up to ${a.devices} devices` : ''}.{' '}
+                {a.sms === 'sent' ? 'A copy was sent to your phone by SMS.' : a.sms === 'failed' ? 'We could not send it by SMS, so please note it down.' : 'A copy is on its way by SMS.'}
               </p>
             </div>
             {a.ended ? (
               <p className="text-sm text-red-700">This code has ended.</p>
+            ) : a.ready && a.online ? (
+              <div className="space-y-2">
+                <p className="rounded-lg bg-green-50 py-3 font-bold text-green-700">You&apos;re online on this device.</p>
+                <p className="text-xs text-slate-500">For another device, join the WiFi and sign in with the code above.</p>
+              </div>
             ) : a.ready ? (
-              <a href={a.connectUrl} className="block w-full rounded-lg bg-[#6d1825] py-3.5 font-bold text-white hover:bg-[#5a141e]">
-                Connect now
-              </a>
+              <div className="space-y-2">
+                <a href={a.connectUrl} className="block w-full rounded-lg bg-[#6d1825] py-3.5 font-bold text-white hover:bg-[#5a141e]">
+                  Connect now
+                </a>
+                <p className="text-xs text-slate-500">If your browser warns that the WiFi login page is not secure, choose to continue: it is your Connectly WiFi router.</p>
+              </div>
             ) : gaveUp ? (
               <p className="text-sm text-amber-700">Your access is taking longer than usual to set up. Try Connect again in a minute, or contact Connectly support with your reference.</p>
             ) : (
