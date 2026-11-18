@@ -4,8 +4,9 @@
 
 import { db } from '@/lib/db/client';
 import { isControllerLive } from '@/lib/network/jobs';
+import { smsConfigured } from '@/lib/sms';
 
-export type Alert = { severity: 'error' | 'warn'; title: string; detail: string; href: string };
+export type Alert = { severity: 'error' | 'warn' | 'info'; title: string; detail: string; href: string };
 
 const DAY_MS = 24 * 3_600_000;
 export const STUCK_GRANT_MS = 10 * 60_000;
@@ -37,6 +38,10 @@ export async function loadAlerts(now = Date.now()): Promise<Alert[]> {
   if (n(grantFailed)) alerts.push({ severity: 'error', title: `${n(grantFailed)} payment${n(grantFailed) === 1 ? '' : 's'} could not create access`, detail: 'Payment confirmed but no access grant was made (last 24 hours). See the activity log.', href: '/admin' });
   if (n(deadJobs)) alerts.push({ severity: 'warn', title: `${n(deadJobs)} controller job${n(deadJobs) === 1 ? '' : 's'} failed`, detail: 'Gave up after retries in the last 24 hours.', href: '/admin/network/jobs?status=dead' });
   if (n(mismatches)) alerts.push({ severity: 'warn', title: `${n(mismatches)} payment${n(mismatches) === 1 ? '' : 's'} did not match the price`, detail: 'Korapay reported a different amount or currency (last 24 hours).', href: '/admin/transactions' });
-  if (n(smsFailed)) alerts.push({ severity: 'warn', title: `${n(smsFailed)} SMS failed`, detail: 'Customers may not have received their code or reminder (last 24 hours). Check Settings → SMS test.', href: '/admin/settings' });
+  if (!smsConfigured()) {
+    alerts.push({ severity: 'info', title: 'SMS pending provider approval', detail: `Waiting for Termii to approve the sender ID. Payments and WiFi work as normal; customers see their code on the payment page.${n(smsFailed) ? ` ${n(smsFailed)} message${n(smsFailed) === 1 ? ' was' : 's were'} not sent in the last 24 hours.` : ''}`, href: '/admin/settings' });
+  } else if (n(smsFailed)) {
+    alerts.push({ severity: 'warn', title: `${n(smsFailed)} SMS failed`, detail: 'Customers may not have received their code or reminder (last 24 hours). Check Settings → SMS test.', href: '/admin/settings' });
+  }
   return alerts;
 }

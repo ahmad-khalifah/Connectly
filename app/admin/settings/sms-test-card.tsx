@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 
-export default function SmsTestCard() {
+export default function SmsTestCard({ configured }: { configured: boolean }) {
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -39,6 +39,13 @@ export default function SmsTestCard() {
       <p className="text-xs text-slate-500 mb-4">
         Sends a fixed test message through Termii and records it. Use your own number.
       </p>
+      {!configured && (
+        <p className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <span className="font-semibold">Pending provider approval.</span> Termii has not approved the sender ID yet, so SMS is not active.
+          Payments and WiFi access work as normal, and customers see their code on the payment page.
+          Once approved, set TERMII_API_KEY, TERMII_SENDER_ID and TERMII_BASE_URL, redeploy, and send a test here.
+        </p>
+      )}
       <form onSubmit={send} className="flex flex-col sm:flex-row gap-2">
         <input
           type="tel"

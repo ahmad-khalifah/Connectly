@@ -3,6 +3,15 @@
 
 import { normaliseNigerianMobile } from '@/lib/phone';
 
+/**
+ * True once Termii is set up. Until Termii approves the sender ID, the key and
+ * sender ID stay unset: every SMS is recorded as not sent, and payments and
+ * WiFi access carry on as normal.
+ */
+export function smsConfigured(): boolean {
+  return Boolean(process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID);
+}
+
 export type SmsResult = { ok: true; messageId: string | null } | { ok: false; error: string };
 
 /**

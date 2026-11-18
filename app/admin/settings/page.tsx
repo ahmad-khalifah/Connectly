@@ -2,6 +2,7 @@ import { Settings, Shield } from 'lucide-react';
 import { db } from '@/lib/db/client';
 import { adminEmails } from '@/lib/auth/admin-emails';
 import SmsTestCard from './sms-test-card';
+import { smsConfigured } from '@/lib/sms';
 import NetworkSettingsCard from './network-settings-card';
 
 export const dynamic = 'force-dynamic';
@@ -27,7 +28,7 @@ export default async function SettingsPage() {
         </div>
       )}
 
-      <SmsTestCard />
+      <SmsTestCard configured={smsConfigured()} />
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-2">
         <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2"><Shield className="h-4 w-4 text-[#6d1825]" /> Admin access</h2>

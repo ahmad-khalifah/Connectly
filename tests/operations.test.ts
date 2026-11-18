@@ -4,7 +4,7 @@ import { createFakeDb, type Handler } from './fake-db';
 let fake: ReturnType<typeof createFakeDb>;
 const sendTermiiSMS = vi.fn();
 vi.mock('@/lib/db/client', () => ({ get db() { return fake.db; } }));
-vi.mock('@/lib/sms', () => ({ sendTermiiSMS: (...a: unknown[]) => sendTermiiSMS(...a) }));
+vi.mock('@/lib/sms', () => ({ sendTermiiSMS: (...a: unknown[]) => sendTermiiSMS(...a), smsConfigured: () => Boolean(process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID) }));
 vi.mock('@/lib/auth/admin', () => ({
   requireAdminApi: async () => ({ user: { id: 'u1', email: 'connectly.hq@outlook.com' }, denied: null }),
 }));
@@ -140,6 +140,11 @@ describe('operational alerts', () => {
     const key = op.table === 'activity_logs' ? String(f.event_type) : op.table;
     return { data: null, error: null, count: c[key] ?? 0 } as never;
   };
+  const withTermii = (on: boolean) => {
+    if (on) { process.env.TERMII_API_KEY = 'test-key'; process.env.TERMII_SENDER_ID = 'Connectly'; }
+    else { delete process.env.TERMII_API_KEY; delete process.env.TERMII_SENDER_ID; }
+  };
+  beforeEach(() => withTermii(true));
   it('is quiet when nothing is wrong', async () => {
     fake = createFakeDb(world({ routers: [{ id: ROUTER, name: 'Garki', identifier: 'cx-garki-01', status: 'online' }], heartbeat: '2026-11-18T11:59:30Z' }));
     const { loadAlerts } = await import('@/lib/admin/alerts');
@@ -156,6 +161,15 @@ describe('operational alerts', () => {
       '1 controller job failed',
       '3 SMS failed',
     ]);
+  });
+  it('reports SMS as pending provider approval, not as failures, until Termii is set up', async () => {
+    withTermii(false);
+    fake = createFakeDb(world({ routers: [{ id: ROUTER, name: 'Garki', identifier: 'cx-garki-01', status: 'online' }], heartbeat: '2026-11-18T11:59:30Z', counts: { notifications: 3 } }));
+    const { loadAlerts } = await import('@/lib/admin/alerts');
+    const alerts = await loadAlerts(NOW);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({ severity: 'info', title: 'SMS pending provider approval' });
+    expect(alerts[0].detail).toMatch(/Payments and WiFi work as normal.*3 messages were not sent/);
   });
   it('does not call a missing controller a problem before any router is active', async () => {
     fake = createFakeDb(world({ routers: [], heartbeat: null }));
