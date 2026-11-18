@@ -12,6 +12,17 @@ export function smsConfigured(): boolean {
   return Boolean(process.env.TERMII_API_KEY && process.env.TERMII_SENDER_ID);
 }
 
+/** The error recorded when an SMS was attempted before Termii was set up. */
+export const SMS_NOT_CONFIGURED = 'Termii is not configured (TERMII_API_KEY / TERMII_SENDER_ID)';
+
+/** How an SMS record reads to an admin: "pending approval" rather than "failed" when Termii was not set up yet. */
+export function smsStatusLabel(status: string, lastError: string | null): { text: string; tone: 'ok' | 'bad' | 'neutral' | 'waiting' } {
+  if (status === 'sent') return { text: 'sent', tone: 'ok' };
+  if (status === 'failed' && lastError?.startsWith('Termii is not configured')) return { text: 'not sent: pending approval', tone: 'neutral' };
+  if (status === 'failed') return { text: 'failed', tone: 'bad' };
+  return { text: status, tone: 'waiting' };
+}
+
 export type SmsResult = { ok: true; messageId: string | null } | { ok: false; error: string };
 
 /**
@@ -26,7 +37,7 @@ export async function sendTermiiSMS(phone: string, message: string): Promise<Sms
   const baseUrl = (process.env.TERMII_BASE_URL || 'https://api.ng.termii.com').replace(/\/+$/, '');
   const channel = process.env.TERMII_CHANNEL || 'dnd';
 
-  if (!apiKey || !senderId) return { ok: false, error: 'Termii is not configured (TERMII_API_KEY / TERMII_SENDER_ID)' };
+  if (!apiKey || !senderId) return { ok: false, error: SMS_NOT_CONFIGURED };
 
   const to = normaliseNigerianMobile(phone);
   if (!to) return { ok: false, error: 'Invalid Nigerian mobile number' };

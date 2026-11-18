@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { User, Receipt, MessageSquare } from 'lucide-react';
 import { db } from '@/lib/db/client';
 import { isUuid } from '@/lib/admin/inputs';
+import { smsStatusLabel } from '@/lib/sms';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,11 +111,15 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-slate-500">{fmt(p.expires_at)}</td>
                     <td className="px-4 py-2 text-xs">
-                      {note ? (
-                        <span className={`inline-flex items-center gap-1 ${note.status === 'sent' ? 'text-emerald-700' : note.status === 'failed' ? 'text-red-600' : 'text-amber-700'}`} title={note.last_error ?? undefined}>
-                          <MessageSquare className="h-3 w-3" /> {note.status}
-                        </span>
-                      ) : '—'}
+                      {note ? (() => {
+                        const label = smsStatusLabel(note.status, note.last_error);
+                        const tone = { ok: 'text-emerald-700', bad: 'text-red-600', neutral: 'text-slate-500', waiting: 'text-amber-700' }[label.tone];
+                        return (
+                          <span className={`inline-flex items-center gap-1 ${tone}`} title={note.last_error ?? undefined}>
+                            <MessageSquare className="h-3 w-3" /> {label.text}
+                          </span>
+                        );
+                      })() : '—'}
                     </td>
                     <td className="px-4 py-2 font-mono text-[11px] text-slate-400">{p.reference}</td>
                   </tr>
