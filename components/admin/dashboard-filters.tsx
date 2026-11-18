@@ -7,14 +7,14 @@ import { selectClass } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
 
 /** Period and location, kept in the URL so a view can be shared or refreshed. */
-export function DashboardFilters({ period, locationId, locations }: { period: Period; locationId: string | null; locations: { id: string; name: string }[] }) {
+export function DashboardFilters({ period, locationId, locations, basePath = '/admin' }: { period: Period; locationId: string | null; locations: { id: string; name: string }[]; basePath?: string }) {
   const router = useRouter();
   const href = (p: Period, loc: string | null) => {
     const q = new URLSearchParams();
     if (p !== '30d') q.set('period', p);
     if (loc) q.set('location', loc);
     const s = q.toString();
-    return s ? `/admin?${s}` : '/admin';
+    return s ? `${basePath}?${s}` : basePath;
   };
   return (
     <div className="flex flex-wrap items-center gap-3">

@@ -110,3 +110,21 @@ describe('customers and network', () => {
     expect(n).toEqual({ locationsOpen: 1, locationsTotal: 2, routersOnline: 1, routersOffline: 1, routersNotActive: 1, controllerLive: false, jobsWaiting: 2, jobsGaveUp: 1 });
   });
 });
+
+import { revenueBreakdown } from '@/lib/admin/metrics';
+describe('revenue breakdown', () => {
+  const P = (loc: string, plan: string, amount: number, fee: number, at = '2026-11-18T08:00:00Z') => ({ ...paid(at, amount, loc, fee), plan_id: plan });
+  it('groups by location with that location\'s expenses, by plan, and keeps general expenses apart', () => {
+    const r = revenueBreakdown(
+      [P(A, 'p1', 200, 3), P(A, 'p2', 500, 7), P(B, 'p1', 200, 3), P(A, 'p1', 999, 0, '2026-10-01T08:00:00Z')],
+      [{ amount_ngn: 100, expense_date: '2026-11-10', location_id: A }, { amount_ngn: 40, expense_date: '2026-11-10', location_id: null }],
+      { period: 'month', locationId: null, now: NOW }
+    );
+    expect(r.byLocation).toEqual([
+      { id: A, payments: 2, revenue: 700, fees: 10, afterFees: 690, expenses: 100, net: 590 },
+      { id: B, payments: 1, revenue: 200, fees: 3, afterFees: 197, expenses: 0, net: 197 },
+    ]);
+    expect(r.byPlan.map((x) => [x.id, x.payments, x.revenue])).toEqual([['p2', 1, 500], ['p1', 2, 400]]);
+    expect(r.generalExpenses).toBe(40);
+  });
+});

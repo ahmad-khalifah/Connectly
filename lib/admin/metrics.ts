@@ -218,3 +218,39 @@ export const DEFINITIONS: { name: string; how: string }[] = [
   { name: 'Jobs that gave up', how: 'Router jobs that ran out of retries in the period.' },
   { name: 'Live sessions and data use', how: 'Not yet measured: the controller does not record router sessions or data use yet.' },
 ];
+
+// ---------------------------------------------------------------- breakdowns
+
+export type BreakdownPurchase = PurchaseRow & { plan_id: string | null };
+export type BreakdownRow = { id: string | null; payments: number; revenue: number; fees: number; afterFees: number; expenses: number; net: number };
+
+/** Revenue in the period grouped by location (with that location's expenses) and by plan. */
+export function revenueBreakdown(
+  purchases: BreakdownPurchase[],
+  expenses: ExpenseRow[],
+  opts: { period: Period; locationId: string | null; now: Date }
+): { byLocation: BreakdownRow[]; byPlan: BreakdownRow[]; generalExpenses: number } {
+  const { from, to } = periodRange(opts.period, opts.now);
+  const paidIn = purchases.filter((p) => p.status === 'paid' && inRange(paidWhen(p), from, to) && (!opts.locationId || p.location_id === opts.locationId));
+  const expIn = expenses.filter((e) => inRange(`${e.expense_date}T12:00:00+01:00`, from, to) && (!opts.locationId || e.location_id === opts.locationId));
+
+  const group = (key: (p: BreakdownPurchase) => string | null, withExpenses: boolean) => {
+    const m = new Map<string | null, BreakdownRow>();
+    const row = (id: string | null) => m.get(id) ?? (m.set(id, { id, payments: 0, revenue: 0, fees: 0, afterFees: 0, expenses: 0, net: 0 }), m.get(id)!);
+    for (const p of paidIn) {
+      const r = row(key(p));
+      r.payments += 1;
+      r.revenue = round2(r.revenue + paidAmount(p));
+      r.fees = round2(r.fees + num(p.gateway_fee_ngn));
+    }
+    if (withExpenses) for (const e of expIn) if (e.location_id) { const r = row(e.location_id); r.expenses = round2(r.expenses + num(e.amount_ngn)); }
+    for (const r of m.values()) { r.afterFees = round2(r.revenue - r.fees); r.net = round2(r.afterFees - r.expenses); }
+    return [...m.values()].sort((a, b) => b.revenue - a.revenue || b.expenses - a.expenses);
+  };
+
+  return {
+    byLocation: group((p) => p.location_id, true),
+    byPlan: group((p) => p.plan_id, false),
+    generalExpenses: opts.locationId ? 0 : round2(expIn.filter((e) => !e.location_id).reduce((s, e) => s + num(e.amount_ngn), 0)),
+  };
+}

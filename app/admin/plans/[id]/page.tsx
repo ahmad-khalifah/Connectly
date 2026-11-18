@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { db } from '@/lib/db/client';
 import { isUuid, planToInput } from '@/lib/admin/inputs';
 import PlanForm from '../../components/plan-form';
+import { PageHeader } from '@/components/admin/page-header';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,13 +19,12 @@ export default async function EditPlanPage({ params }: { params: Promise<{ id: s
   if (!plan) notFound();
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 mt-8">
-      <Link href="/admin/plans" className="text-sm font-bold text-slate-500 hover:text-[#6d1825] transition-colors">
-        &larr; Back to Plans
-      </Link>
-      <p className="text-sm text-slate-500">
-        {paidCount ?? 0} paid purchase{paidCount === 1 ? '' : 's'} on this plan.
-      </p>
+    <div className="space-y-6">
+      <PageHeader
+        back={<Link href="/admin/plans" className="font-semibold text-muted hover:text-brand">Plans</Link>}
+        title={`Edit ${plan.name}`}
+        description={`${paidCount ?? 0} paid purchase${paidCount === 1 ? '' : 's'} on this plan.`}
+      />
       <PlanForm mode="edit" planId={id} initial={planToInput(plan)} locations={locations ?? []} />
     </div>
   );

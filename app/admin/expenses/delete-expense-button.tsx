@@ -21,16 +21,16 @@ export default function DeleteExpenseButton({ id }: { id: string }) {
     setArmed(false);
   };
 
-  if (error) return <span className="text-xs text-red-600">{error}</span>;
+  if (error) return <span className="text-[13px] text-bad">{error}</span>;
   if (!armed) {
-    return <button onClick={() => setArmed(true)} className="text-xs font-semibold text-slate-500 hover:text-red-700">Remove</button>;
+    return <button onClick={() => setArmed(true)} className="text-[13px] font-semibold text-muted hover:text-bad">Remove</button>;
   }
   return (
     <span className="inline-flex gap-2">
-      <button onClick={remove} disabled={busy} className="text-xs font-semibold text-red-700 hover:underline disabled:opacity-50">
+      <button onClick={remove} disabled={busy} className="text-[13px] font-semibold text-bad hover:underline disabled:opacity-50">
         {busy ? 'Removing…' : 'Confirm'}
       </button>
-      <button onClick={() => setArmed(false)} className="text-xs text-slate-500 hover:underline">Keep</button>
+      <button onClick={() => setArmed(false)} className="text-[13px] text-muted hover:underline">Keep</button>
     </span>
   );
 }
