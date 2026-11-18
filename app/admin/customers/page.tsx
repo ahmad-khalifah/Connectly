@@ -35,7 +35,8 @@ export default async function CustomersPage({
       created_at,
       expires_at,
       plans(name, duration_seconds),
-      locations(name)
+      locations(name),
+      network_authorizations(status, revoked_at)
     `)
     .eq('status', 'paid')
     .order('created_at', { ascending: false });
@@ -60,7 +61,10 @@ export default async function CustomersPage({
       const location = Array.isArray(p.locations) ? p.locations[0] : p.locations;
       
       const expiryDate = p.expires_at ? new Date(p.expires_at) : null;
-      const isOnline = !!expiryDate && expiryDate > new Date();
+      // Access ended early (revoked by an admin) counts as ended, whatever the paid end time says.
+      const grants = (Array.isArray(p.network_authorizations) ? p.network_authorizations : p.network_authorizations ? [p.network_authorizations] : []) as { status: string; revoked_at: string | null }[];
+      const revoked = grants.length > 0 && grants.every((g) => g.revoked_at || g.status === 'revoked');
+      const isOnline = !!expiryDate && expiryDate > new Date() && !revoked;
 
       customerMap.set(phone, {
         id: p.id,
@@ -72,7 +76,7 @@ export default async function CustomersPage({
         planName: plan?.name || 'Unknown Plan',
         isOnline: isOnline,
         currentLocation: location?.name || 'Remote',
-        expiry: expiryDate ? expiryDate.toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : '—'
+        expiry: expiryDate ? expiryDate.toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'short', timeStyle: 'short' }) : '—'
       });
     }
   });

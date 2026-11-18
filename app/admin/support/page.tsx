@@ -55,7 +55,7 @@ export default async function SupportPage() {
                   <span className="block text-xs font-normal text-slate-400 mt-0.5 truncate max-w-xs">{ticket.description}</span>
                 </td>
                 <td className="px-6 py-4 text-xs text-slate-500">{ticket.locations?.name || 'General'}</td>
-                <td className="px-6 py-4 text-xs font-mono text-slate-500">{new Date(ticket.created_at).toLocaleDateString('en-NG')}</td>
+                <td className="px-6 py-4 text-xs font-mono text-slate-500">{new Date(ticket.created_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}</td>
                 <td className="px-6 py-4 text-right flex justify-end">{getStatusBadge(ticket.status)}</td>
               </tr>
             ))}

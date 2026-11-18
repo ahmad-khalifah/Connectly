@@ -49,7 +49,7 @@ export default async function PortalPage({
           <h1 className="mt-6 text-2xl font-bold text-gray-900">You Are Connected</h1>
           <p className="mt-2 text-gray-600">Your internet access is active.</p>
           <p className="mt-6 text-sm text-gray-500">
-            Expires at: <strong>{new Date(activeAuth.expires_at).toLocaleString('en-NG')}</strong>
+            Expires at: <strong>{new Date(activeAuth.expires_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' })}</strong>
           </p>
         </main>
       );

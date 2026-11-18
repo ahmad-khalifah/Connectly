@@ -125,7 +125,7 @@ export default async function LocationDetailPage({ params }: { params: Promise<{
                   const amount = p.status === 'paid' ? Number(p.amount_paid || p.net_amount_ngn || 0) : Number(p.amount_kobo ?? 0) / 100 || Number(p.net_amount_ngn || 0);
                   return (
                     <tr key={p.id}>
-                      <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{new Date(p.created_at).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                      <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{new Date(p.created_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'short', timeStyle: 'short' })}</td>
                       <td className="px-4 py-2 text-slate-900">{plan?.name ?? '—'}</td>
                       <td className="px-4 py-2 font-mono">₦{amount.toLocaleString('en-NG')}</td>
                       <td className="px-4 py-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${p.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : p.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span></td>

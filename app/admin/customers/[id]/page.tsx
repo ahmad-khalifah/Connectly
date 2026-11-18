@@ -12,7 +12,7 @@ function currentAccess<T extends { expires_at: string | null }>(paid: T[]): T | 
   return paid.find((p) => p.expires_at && new Date(p.expires_at).getTime() > now);
 }
 
-const fmt = (d: string | null) => (d ? new Date(d).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+const fmt = (d: string | null) => (d ? new Date(d).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

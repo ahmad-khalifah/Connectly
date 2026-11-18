@@ -17,13 +17,16 @@ export default async function LocationsDirectoryPage() {
       institutions(name),
       routers(id),
       access_points(id),
-      network_sessions(status),
-      purchases(status, amount_paid, net_amount_ngn)
+      purchases(status, amount_paid, net_amount_ngn, network_authorizations(status, revoked_at, expires_at))
     `)
     .order('name', { ascending: true });
 
   const formattedLocations = locations?.map(loc => {
-    const activeSessions = ((loc.network_sessions as { status: string | null }[]) ?? []).filter((s) => s.status === 'active').length;
+    // Paid codes live on this location's routers right now (on the router, not ended, not revoked).
+    const now = Date.now();
+    const activeSessions = ((loc.purchases as { network_authorizations?: { status: string; revoked_at: string | null; expires_at: string }[] | null }[]) ?? [])
+      .flatMap((p) => p.network_authorizations ?? [])
+      .filter((g) => g.status === 'active' && !g.revoked_at && Date.parse(g.expires_at) > now).length;
     // Gross takings from verified payments only (pending and failed purchases are excluded).
     const revenue = ((loc.purchases as { status: string; amount_paid: number | null; net_amount_ngn: number | null }[]) ?? [])
       .filter((p) => p.status === 'paid')
@@ -88,7 +91,7 @@ export default async function LocationsDirectoryPage() {
 
               <div className="space-y-3 pt-4 border-t border-slate-100 flex-1">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-600"><Users className="h-4 w-4 text-slate-400"/> Active Users</span>
+                  <span className="flex items-center gap-2 text-slate-600"><Users className="h-4 w-4 text-slate-400"/> Live paid codes</span>
                   <span className="font-mono font-bold text-slate-900">{location.activeSessions}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">

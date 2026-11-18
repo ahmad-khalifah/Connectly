@@ -19,7 +19,7 @@ export function MetricTimelineChart({ transactions = [] }: { transactions?: any[
 
     const grouped = transactions.reduce((acc: any, curr: any) => {
       // Format date to "Sep 26"
-      const date = new Date(curr.created_at).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
+      const date = new Date(curr.created_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos', month: 'short', day: 'numeric' });
       
       if (!acc[date]) {
         acc[date] = { date, amount: 0, count: 0 };

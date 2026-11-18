@@ -152,7 +152,7 @@ export default async function TransactionsPage({
               return (
                 <tr key={tx.id} className="hover:bg-slate-50 transition-colors align-top">
                   <td className="px-4 py-4 text-xs font-mono text-slate-500">
-                    {new Date(tx.created_at).toLocaleString('en-NG')}
+                    {new Date(tx.created_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })}
                     <div className="mt-1 text-[10px] text-slate-400 break-all max-w-[180px]" title={tx.reference}>
                       {tx.reference}
                     </div>

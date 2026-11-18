@@ -91,11 +91,11 @@ export function planRow(p: PlanInput) {
     price_kobo: p.priceNaira * 100,
     duration_seconds: p.durationMinutes * 60,
     duration_minutes: p.durationMinutes,
-    download_limit_kbps: downKbps, // read by the portal and the hotspot rate limit
+    download_limit_kbps: downKbps, // older copy, kept in step
     upload_limit_kbps: upKbps,
     download_speed: downKbps,      // legacy admin columns
     upload_speed: upKbps,
-    speed_down_mbps: p.downloadMbps, // read by roaming verification
+    speed_down_mbps: p.downloadMbps, // what the controller enforces on the router
     speed_up_mbps: p.uploadMbps,
     device_limit: p.deviceLimit,
     data_limit_mb: p.dataLimitMb,
@@ -104,10 +104,14 @@ export function planRow(p: PlanInput) {
   };
 }
 
-/** Reads a plan row back into form values, preferring the canonical kbps columns. */
+/**
+ * Reads a plan row back into form values. speed_*_mbps comes first: it is what
+ * the controller puts on the router (rate limit), so the admin sees what
+ * customers actually get. The kbps columns are older copies kept in step.
+ */
 export function planToInput(row: Record<string, unknown>): PlanInput {
   const kbps = (a: unknown, b: unknown, mbps: unknown) =>
-    Number(a) > 0 ? Math.round(Number(a) / 1024) : Number(b) > 0 ? Math.round(Number(b) / 1024) : Number(mbps) || 1;
+    Number(mbps) > 0 ? Number(mbps) : Number(a) > 0 ? Math.round(Number(a) / 1024) : Number(b) > 0 ? Math.round(Number(b) / 1024) : 1;
   return {
     name: String(row.name ?? ''),
     priceNaira: Math.round(Number(row.price_kobo ?? 0) / 100),
