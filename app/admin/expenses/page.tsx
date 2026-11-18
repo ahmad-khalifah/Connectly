@@ -1,26 +1,23 @@
 import { Receipt } from 'lucide-react';
 import { db } from '@/lib/db/client';
+import { lagosToday } from '@/lib/admin/inputs';
+import ExpenseForm from './expense-form';
+import DeleteExpenseButton from './delete-expense-button';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ExpensesPage() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseRoleKey) {
-    return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
-  }
-
   const supabase = db;
 
   const [expensesRes, locationsRes] = await Promise.all([
     supabase.from('expenses').select('*, locations(name)').order('expense_date', { ascending: false }),
-    supabase.from('locations').select('id, name')
+    supabase.from('locations').select('id, name').order('name')
   ]);
 
   if (expensesRes.error) console.error('[EXPENSES_FETCH_ERROR]', expensesRes.error);
 
   const expenses = expensesRes.data || [];
+  const locations = (locationsRes.data ?? []) as { id: string; name: string }[];
   const totalOpex = expenses.reduce((acc, curr) => acc + Number(curr.amount_ngn), 0);
 
   return (
@@ -40,7 +37,13 @@ export default async function ExpensesPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+      <ExpenseForm locations={locations} today={lagosToday()} />
+
+      {expensesRes.error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">Expenses could not be loaded; the total above is incomplete.</div>
+      )}
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-xs">
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-900 text-xs uppercase tracking-wider font-semibold">
             <tr>
@@ -50,6 +53,7 @@ export default async function ExpensesPage() {
               <th className="px-6 py-4">Description</th>
               <th className="px-6 py-4">Logged By</th>
               <th className="px-6 py-4 text-right">Amount (NGN)</th>
+              <th className="px-6 py-4"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -69,11 +73,12 @@ export default async function ExpensesPage() {
                 <td className="px-6 py-4 font-mono font-bold text-slate-900 text-right">
                   ₦{Number(expense.amount_ngn).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </td>
+                <td className="px-6 py-4 text-right"><DeleteExpenseButton id={expense.id} /></td>
               </tr>
             ))}
             {expenses.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
                   No operating expenses logged yet.
                 </td>
               </tr>

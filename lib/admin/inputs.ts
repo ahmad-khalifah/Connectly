@@ -205,3 +205,62 @@ export function friendlyDbError(error: { code?: string; message?: string } | nul
   if (error.code === '23503') return 'A linked record does not exist.';
   return fallback;
 }
+
+// ---------------------------------------------------------------- expenses
+
+/** Matches the CHECK constraint on public.expenses.category. */
+export const EXPENSE_CATEGORIES = ['backhaul', 'equipment', 'installation', 'repairs', 'power', 'staff', 'marketing', 'software', 'other'] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export type ExpenseInput = {
+  category: ExpenseCategory;
+  amountNaira: number;
+  locationId: string | null;
+  description: string;
+  expenseDate: string; // YYYY-MM-DD
+};
+
+/** Today's date in Lagos as YYYY-MM-DD. */
+export function lagosToday(now = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+}
+
+export function parseExpenseInput(body: unknown, now = new Date()): Parsed<ExpenseInput> {
+  if (!body || typeof body !== 'object') return { ok: false, error: 'Missing expense details.' };
+  const b = body as Record<string, unknown>;
+
+  const category = String(b.category ?? '');
+  if (!(EXPENSE_CATEGORIES as readonly string[]).includes(category)) return { ok: false, error: 'Choose a category.' };
+
+  const amount = typeof b.amountNaira === 'number' ? b.amountNaira : Number(String(b.amountNaira ?? '').replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000_000) return { ok: false, error: 'Amount must be more than ₦0 and at most ₦100,000,000.' };
+  if (Math.round(amount * 100) !== amount * 100) return { ok: false, error: 'Amount can have at most 2 decimal places (kobo).' };
+
+  const description = String(b.description ?? '').trim();
+  if (description.length < 3 || description.length > 300) return { ok: false, error: 'Description must be 3 to 300 characters.' };
+
+  const expenseDate = String(b.expenseDate ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate) || Number.isNaN(Date.parse(`${expenseDate}T00:00:00Z`))) return { ok: false, error: 'Enter the expense date.' };
+  if (expenseDate > lagosToday(now)) return { ok: false, error: 'Expense date cannot be in the future.' };
+  if (expenseDate < '2020-01-01') return { ok: false, error: 'Expense date is too far in the past.' };
+
+  const rawLoc = b.locationId;
+  let locationId: string | null = null;
+  if (rawLoc !== undefined && rawLoc !== null && rawLoc !== '') {
+    if (!isUuid(rawLoc)) return { ok: false, error: 'Unknown location.' };
+    locationId = rawLoc;
+  }
+
+  return { ok: true, value: { category: category as ExpenseCategory, amountNaira: amount, locationId, description, expenseDate } };
+}
+
+export function expenseRow(e: ExpenseInput, recordedBy: string) {
+  return {
+    category: e.category,
+    amount_ngn: e.amountNaira,
+    location_id: e.locationId,
+    description: e.description,
+    expense_date: e.expenseDate,
+    recorded_by: recordedBy,
+  };
+}
