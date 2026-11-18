@@ -3,6 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+const OUTCOME: Record<string, string> = {
+  paid: 'Confirmed paid',
+  already_paid: 'Already paid',
+  failed: 'Korapay says it failed',
+  still_pending: 'Still waiting at Korapay',
+  not_found_at_korapay: 'Korapay has no record',
+  amount_mismatch: 'Amount did not match',
+  currency_mismatch: 'Currency did not match',
+};
 
 // Asks the server to re-check a pending payment with Korapay's verify API.
 // The server decides; this button never sets a status itself.
@@ -21,10 +32,10 @@ export default function ReconcileButton({ reference }: { reference: string }) {
         body: JSON.stringify({ reference }),
       });
       const json = await res.json().catch(() => ({}));
-      setMessage(res.ok ? String(json.outcome ?? 'done').replace(/_/g, ' ') : json.message || 'Check failed');
+      setMessage(res.ok ? OUTCOME[json.outcome] ?? String(json.outcome ?? 'Done').replace(/_/g, ' ') : json.message || 'Check failed');
       router.refresh();
     } catch {
-      setMessage('Network error');
+      setMessage('No connection. Try again.');
     } finally {
       setBusy(false);
     }
@@ -32,15 +43,10 @@ export default function ReconcileButton({ reference }: { reference: string }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={run}
-        disabled={busy}
-        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
-        title="Ask Korapay for the current status of this payment"
-      >
-        <RefreshCw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} /> Check with Korapay
-      </button>
-      {message && <span className="text-[11px] text-slate-500">{message}</span>}
+      <Button variant="secondary" size="sm" onClick={run} disabled={busy} title="Ask Korapay for the current status of this payment">
+        <RefreshCw className={busy ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} /> Check with Korapay
+      </Button>
+      {message && <span className="text-[12px] text-muted" role="status">{message}</span>}
     </div>
   );
 }

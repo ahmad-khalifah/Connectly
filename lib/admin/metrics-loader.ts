@@ -1,20 +1,7 @@
 import { db } from '@/lib/db/client';
 import { isControllerLive } from '@/lib/network/jobs';
 import type { MetricInput } from './metrics';
-
-const PAGE = 1000;
-
-/** Every row of a query, paging past the API's 1,000-row limit. */
-async function all<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await build(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    const page = (data ?? []) as T[];
-    rows.push(...page);
-    if (page.length < PAGE) return rows;
-  }
-}
+import { fetchAll as all } from '@/lib/db/fetch-all';
 
 type RawGrant = { status: string; expires_at: string; revoked_at: string | null; revoke_reason: string | null; router_id: string; purchases: { phone_number: string | null } | { phone_number: string | null }[] | null };
 
