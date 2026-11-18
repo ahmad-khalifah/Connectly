@@ -3,6 +3,7 @@
 import { useState } from 'react';
 // Ensure this path matches where you created the server action
 import { initializeKoraCheckout } from '../actions/payment'; 
+import CodeLogin from './code-login';
 
 interface Plan {
   id: string;
@@ -34,9 +35,11 @@ interface PortalClientProps {
   routerId: string;
   location: Location;
   plans: Plan[];
+  /** The router's own login page, for customers who already have a code. */
+  loginUrl: string | null;
 }
 
-export default function PortalClient({ mac, ip, routerId, location, plans }: PortalClientProps) {
+export default function PortalClient({ mac, ip, routerId, location, plans, loginUrl }: PortalClientProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string>(plans[0]?.id || '');
   const [phone, setPhone] = useState('');
@@ -142,6 +145,12 @@ export default function PortalClient({ mac, ip, routerId, location, plans }: Por
             {isProcessing ? 'Connecting to secure gateway...' : `Pay ₦${priceNaira}`}
           </button>
         </div>
+
+        {loginUrl && (
+          <div className="mt-8 border-t border-gray-100 pt-6">
+            <CodeLogin loginUrl={loginUrl} />
+          </div>
+        )}
       </div>
     </main>
   );

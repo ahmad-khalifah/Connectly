@@ -1,5 +1,7 @@
 import { db } from '../../lib/db/client';
 import PortalClient from './portal-client';
+import CodeLogin from './code-login';
+import { hotspotLoginUrl } from '@/lib/network/customer-access';
 import { CheckCircle2 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +23,15 @@ export default async function PortalPage({
       </div>
     );
   }
+
+  // The router's own login page, worked out here from the registered router,
+  // so the code form never sends a code to an address taken from the URL.
+  const { data: anyRouter } = await db
+    .from('routers')
+    .select('id')
+    .eq('identifier', routerIdentifier)
+    .maybeSingle();
+  const loginUrl = anyRouter ? await hotspotLoginUrl(anyRouter.id) : null;
 
   // 1. Check if the device is already authorized
   const { data: device } = await db
@@ -46,11 +57,16 @@ export default async function PortalPage({
           <div className="rounded-full bg-green-100 p-4">
             <CheckCircle2 className="h-12 w-12 text-green-600" />
           </div>
-          <h1 className="mt-6 text-2xl font-bold text-gray-900">You Are Connected</h1>
-          <p className="mt-2 text-gray-600">Your internet access is active.</p>
+          <h1 className="mt-6 text-2xl font-bold text-gray-900">Your plan is active</h1>
+          <p className="mt-2 text-gray-600">This device has a WiFi plan that is still running.</p>
           <p className="mt-6 text-sm text-gray-500">
             Expires at: <strong>{new Date(activeAuth.expires_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' })}</strong>
           </p>
+          {loginUrl && (
+            <div className="mt-8 w-full max-w-md rounded-xl border border-gray-100 bg-white p-6 text-left shadow-sm">
+              <CodeLogin loginUrl={loginUrl} heading="Not browsing? Enter your WiFi code to reconnect" />
+            </div>
+          )}
         </main>
       );
     }
@@ -101,6 +117,7 @@ export default async function PortalPage({
       routerId={routerData.id} 
       location={location} 
       plans={plans || []} 
+      loginUrl={loginUrl}
     />
   );
 }

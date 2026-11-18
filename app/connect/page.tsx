@@ -1,5 +1,7 @@
 import { db } from '../../lib/db/client';
 import PortalClient from '../portal/portal-client';
+import CodeLogin from '../portal/code-login';
+import { hotspotLoginUrl } from '@/lib/network/customer-access';
 import { CheckCircle2 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +54,8 @@ export default async function ConnectPage({
     );
   }
 
+  const loginUrl = await hotspotLoginUrl(routerIdStr);
+
   // 2. Check existing authorization (Only possible if MAC is provided)
   if (mac) {
     const { data: device } = await db.from('devices').select('id').eq('mac_address', mac).maybeSingle();
@@ -72,8 +76,11 @@ export default async function ConnectPage({
             <div className="rounded-full bg-green-100 p-4">
               <CheckCircle2 className="h-12 w-12 text-green-600" />
             </div>
-            <h1 className="mt-6 text-2xl font-bold text-gray-900">You Are Connected</h1>
-            <p className="mt-2 text-gray-600">Your internet access is active.</p>
+            <h1 className="mt-6 text-2xl font-bold text-gray-900">Your plan is active</h1>
+            <p className="mt-2 text-gray-600">This device has a WiFi plan that is still running.</p>
+            <div className="mt-8 w-full max-w-md rounded-xl border border-gray-100 bg-white p-6 text-left shadow-sm">
+              <CodeLogin loginUrl={loginUrl} heading="Not browsing? Enter your WiFi code to reconnect" />
+            </div>
           </main>
         );
       }
@@ -95,6 +102,7 @@ export default async function ConnectPage({
       routerId={routerIdStr} 
       location={locationData} 
       plans={plans || []} 
+      loginUrl={loginUrl}
     />
   );
 }

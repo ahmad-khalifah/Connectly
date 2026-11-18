@@ -1,5 +1,6 @@
 import { db } from '@/lib/db/client';
 import { HOTSPOT_DEFAULTS } from './hotspot';
+import { codeLoginHref } from './code-login';
 
 // What a paying customer needs to get online: their voucher, whether the
 // controller has put it on the router yet, and the router's own login page.
@@ -26,15 +27,9 @@ export async function hotspotLoginUrl(routerId: string): Promise<string> {
   return `http://${dns}/login`;
 }
 
-/**
- * Link that logs a device in with its voucher. RouterOS accepts the login
- * form as a GET with username and password (login-by http-pap). It is plain
- * HTTP on the customer's own WiFi network, which is how a hotspot login
- * works; the voucher only opens this plan, never an account.
- */
+/** Link that logs a device in with its voucher (see code-login.ts). */
 export function connectLink(loginUrl: string, voucher: string, dst = 'https://getconnectly.net'): string {
-  const q = new URLSearchParams({ username: voucher, password: voucher, dst });
-  return `${loginUrl}?${q.toString()}`;
+  return codeLoginHref(loginUrl, voucher, dst);
 }
 
 export async function accessForPurchase(purchaseId: string, routerId: string | null): Promise<CustomerAccess | null> {
