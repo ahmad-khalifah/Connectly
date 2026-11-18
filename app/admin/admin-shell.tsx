@@ -2,148 +2,187 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, Users, CreditCard, MapPin, Network, 
-  ArrowLeftRight, TrendingUp, Receipt, 
-  LifeBuoy, Settings, LogOut, ShieldAlert, ListChecks, KeyRound } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  LayoutDashboard, Users, CreditCard, MapPin, Router, ArrowLeftRight, TrendingUp, Receipt,
+  LifeBuoy, Settings, LogOut, ListChecks, KeyRound, Bell, Menu, X,
+} from 'lucide-react';
+import { Wordmark } from '@/components/ui/lens-mark';
+import { cn } from '@/lib/utils';
 
-interface NavItem {
-  name: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: string[];
-}
+type NavItem = { name: string; href: string; icon: React.ComponentType<{ className?: string }> };
 
-const NAVIGATION_GROUPS: { group: string; items: NavItem[] }[] = [
+// Every signed-in admin sees every section: access is one allow-list
+// (ADMIN_EMAILS), with no roles.
+const NAV: { group: string; items: NavItem[] }[] = [
   {
-    group: 'CORE OPERATIONS',
+    group: 'Overview',
     items: [
-      { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, roles: ['owner', 'admin', 'finance', 'network_engineer', 'support', 'operations'] },
-      { name: 'Customers 360', href: '/admin/customers', icon: Users, roles: ['owner', 'admin', 'support'] },
-      { name: 'Locations & Campuses', href: '/admin/locations', icon: MapPin, roles: ['owner', 'admin', 'network_engineer', 'operations'] },
-      { name: 'Plans & Pricing', href: '/admin/plans', icon: CreditCard, roles: ['owner', 'admin'] },
-    ]
+      { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+      { name: 'Alerts', href: '/admin/alerts', icon: Bell },
+    ],
   },
   {
-    group: 'NETWORK INFRASTRUCTURE',
+    group: 'Sales',
     items: [
-      { name: 'Network', href: '/admin/network', icon: Network, roles: ['owner', 'admin', 'network_engineer'] },
-      { name: 'Controller Jobs', href: '/admin/network/jobs', icon: ListChecks, roles: ['owner', 'admin', 'network_engineer'] },
-      { name: 'Access Grants', href: '/admin/network/access', icon: KeyRound, roles: ['owner', 'admin', 'network_engineer', 'support'] },
-    ]
+      { name: 'Customers', href: '/admin/customers', icon: Users },
+      { name: 'Payments', href: '/admin/transactions', icon: ArrowLeftRight },
+      { name: 'Plans', href: '/admin/plans', icon: CreditCard },
+      { name: 'Revenue', href: '/admin/revenue', icon: TrendingUp },
+      { name: 'Expenses', href: '/admin/expenses', icon: Receipt },
+    ],
   },
   {
-    group: 'FINANCE & AUDIT',
+    group: 'Network',
     items: [
-      { name: 'Transactions', href: '/admin/transactions', icon: ArrowLeftRight, roles: ['owner', 'admin', 'finance'] },
-      { name: 'Revenue Analytics', href: '/admin/revenue', icon: TrendingUp, roles: ['owner', 'admin', 'finance'] },
-      { name: 'Operating Expenses', href: '/admin/expenses', icon: Receipt, roles: ['owner', 'admin', 'finance'] },
-    ]
+      { name: 'Locations', href: '/admin/locations', icon: MapPin },
+      { name: 'Routers', href: '/admin/network', icon: Router },
+      { name: 'Access grants', href: '/admin/network/access', icon: KeyRound },
+      { name: 'Controller jobs', href: '/admin/network/jobs', icon: ListChecks },
+    ],
   },
   {
-    group: 'SERVICES & SECURITY',
+    group: 'Service',
     items: [
-      { name: 'Support Tickets', href: '/admin/support', icon: LifeBuoy, roles: ['owner', 'admin', 'support'] },
-      { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['owner', 'admin'] },
-    ]
-  }
+      { name: 'Support', href: '/admin/support', icon: LifeBuoy },
+      { name: 'Settings', href: '/admin/settings', icon: Settings },
+    ],
+  },
 ];
+
+const ALL = NAV.flatMap((g) => g.items);
+
+/** The most specific nav item that matches the path. */
+function activeHref(pathname: string): string | undefined {
+  return ALL.map((i) => i.href)
+    .filter((h) => pathname === h || (h !== '/admin' && pathname.startsWith(h + '/')) || (h !== '/admin' && pathname === h))
+    .sort((a, b) => b.length - a.length)[0] ?? (pathname === '/admin' ? '/admin' : undefined);
+}
 
 export default function AdminShell({
   children,
   operatorEmail,
+  environment,
 }: {
   children: React.ReactNode;
   operatorEmail: string;
+  environment: 'production' | 'preview' | 'development';
 }) {
   const pathname = usePathname();
-  // Extracted from verified session cookie or auth context
-  const [currentRole] = useState<string>('owner'); 
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const active = activeHref(pathname);
+
+  const envLabel = environment === 'production' ? 'Production' : environment === 'preview' ? 'Staging' : 'Local';
+
+  const nav = (
+    <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5" aria-label="Admin">
+      {NAV.map((group) => (
+        <div key={group.group}>
+          <p className="px-3 text-xs font-semibold text-subtle">{group.group}</p>
+          <ul className="mt-1.5 space-y-0.5">
+            {group.items.map((item) => {
+              const isActive = item.href === active;
+              const Icon = item.icon;
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      'flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium transition-colors',
+                      isActive ? 'bg-brand-soft text-brand' : 'text-muted hover:bg-canvas hover:text-ink'
+                    )}
+                  >
+                    <Icon className={cn('h-4 w-4', isActive ? 'text-brand' : 'text-subtle')} />
+                    {item.name}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+
+  const footer = (
+    <div className="border-t border-line px-4 py-4">
+      <p className="truncate text-[13px] font-semibold text-ink" title={operatorEmail}>{operatorEmail || 'Signed in'}</p>
+      <button
+        type="button"
+        onClick={async () => {
+          await fetch('/api/auth/logout', { method: 'POST' });
+          router.replace('/login');
+          router.refresh();
+        }}
+        className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted hover:text-bad"
+      >
+        <LogOut className="h-3.5 w-3.5" /> Sign out
+      </button>
+    </div>
+  );
+
+  const brand = (
+    <div className="flex items-center justify-between gap-2">
+      <Link href="/admin" aria-label="Connectly admin home"><Wordmark /></Link>
+      <span
+        className={cn(
+          'rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset',
+          environment === 'production' ? 'bg-ok-soft text-ok ring-ok/20' : 'bg-warn-soft text-warn ring-warn/20'
+        )}
+        title="Which database and payment keys this console uses"
+      >
+        {envLabel}
+      </span>
+    </div>
+  );
 
   return (
-    <div className="flex min-h-screen bg-[#F8F9FA] text-slate-800 antialiased font-sans">
-      {/* Enterprise Side Navigation */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-200 bg-white">
-          <Image 
-            src="/connectly-logo-horizontal.svg" 
-            alt="Connectly Technologies" 
-            width={130} 
-            height={32} 
-            priority
-          />
-          <span className="text-[10px] font-mono uppercase tracking-wider bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-            v2.4-prod
-          </span>
-        </div>
-
-        {/* Navigation Sections */}
-        <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-          {NAVIGATION_GROUPS.map((group) => {
-            const accessibleItems = group.items.filter(item => item.roles.includes(currentRole));
-            if (accessibleItems.length === 0) return null;
-
-            return (
-              <div key={group.group}>
-                <h3 className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  {group.group}
-                </h3>
-                <div className="space-y-1">
-                  {accessibleItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          isActive 
-                            ? 'bg-[#6d1825] text-white shadow-sm' 
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                        }`}
-                      >
-                        <Icon className={`h-4 w-4 ${isActive ? 'text-[#cfa253]' : 'text-slate-500'}`} />
-                        {item.name}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* User Identity & Secure Logout */}
-        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-900 leading-none truncate max-w-[180px]" title={operatorEmail}>
-              {operatorEmail || 'Console Operator'}
-            </p>
-            <span className="inline-block mt-1 text-[10px] uppercase tracking-wide font-mono text-[#6d1825] font-bold bg-[#6d1825]/10 px-1.5 py-0.5 rounded">
-              {currentRole}
-            </span>
-          </div>
-          <button 
-            onClick={async () => {
-              await fetch('/api/auth/logout', { method: 'POST' });
-              window.location.href = '/login';
-            }}
-            title="Sign Out"
-            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-white border border-transparent hover:border-slate-200 transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
+    <div className="flex min-h-screen flex-1 bg-canvas text-ink">
+      {/* Desktop sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
+        <div className="border-b border-line px-5 py-4">{brand}</div>
+        {nav}
+        {footer}
       </aside>
 
-      {/* Main Execution Surface */}
-      <main className="flex-1 min-w-0 overflow-y-auto">
-        <div className="p-8 max-w-[1600px] mx-auto">
-          {children}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile top bar */}
+        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface px-4 py-3 lg:hidden">
+          {brand}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="ml-3 rounded-md p-2 text-ink hover:bg-canvas"
+            aria-label="Open menu"
+            aria-expanded={open}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
         </div>
-      </main>
+
+        {open && (
+          <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+            <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
+            <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col bg-surface shadow-xl">
+              <div className="flex items-center justify-between border-b border-line px-4 py-3">
+                <Wordmark />
+                <button type="button" onClick={() => setOpen(false)} className="rounded-md p-2 hover:bg-canvas" aria-label="Close menu">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              {nav}
+              {footer}
+            </aside>
+          </div>
+        )}
+
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

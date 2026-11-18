@@ -144,11 +144,15 @@ export default function PaymentStatus({ reference }: { reference: string }) {
 
       {a ? (
         <>
-          <VoucherBox code={a.voucher} devices={a.devices} sms={a.sms ?? 'none'} />
+          {a.ended ? (
+            <p className="mt-6 text-sm text-muted">
+              Code <span className="font-semibold text-ink">{a.voucher}</span> no longer works. Join the Connectly WiFi again to buy a new plan.
+            </p>
+          ) : (
+            <VoucherBox code={a.voucher} devices={a.devices} sms={a.sms ?? 'none'} />
+          )}
           <div className="mt-5">
-            {a.ended ? (
-              <p className="text-sm text-muted">Join the Connectly WiFi again to buy a new plan.</p>
-            ) : online ? (
+            {a.ended ? null : online ? (
               <p className="text-sm text-muted">For another device, join the WiFi and enter this code under &ldquo;Already paid?&rdquo;.</p>
             ) : a.ready ? (
               <>
