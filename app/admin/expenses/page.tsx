@@ -47,33 +47,33 @@ export default async function ExpensesPage() {
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-900 text-xs uppercase tracking-wider font-semibold">
             <tr>
-              <th className="px-6 py-4">Expense Date</th>
-              <th className="px-6 py-4">Category</th>
-              <th className="px-6 py-4">Facility / Location</th>
-              <th className="px-6 py-4">Description</th>
-              <th className="px-6 py-4">Logged By</th>
-              <th className="px-6 py-4 text-right">Amount (NGN)</th>
-              <th className="px-6 py-4"><span className="sr-only">Actions</span></th>
+              <th className="px-4 py-3">Expense Date</th>
+              <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Facility / Location</th>
+              <th className="px-4 py-3">Description</th>
+              <th className="px-4 py-3">Logged By</th>
+              <th className="px-4 py-3 text-right">Amount (NGN)</th>
+              <th className="px-4 py-3"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {expenses.map((expense) => (
               <tr key={expense.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 font-mono text-xs">{expense.expense_date}</td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-3 font-mono text-xs">{expense.expense_date}</td>
+                <td className="px-4 py-3">
                   <span className="px-2 py-0.5 rounded text-[11px] font-mono uppercase font-bold bg-slate-100 text-slate-700">
                     {expense.category}
                   </span>
                 </td>
-                <td className="px-6 py-4 font-medium text-slate-900">
+                <td className="px-4 py-3 font-medium text-slate-900">
                   {expense.locations?.name || 'General / Network-Wide'}
                 </td>
-                <td className="px-6 py-4 text-slate-500">{expense.description}</td>
-                <td className="px-6 py-4 text-xs font-mono text-slate-400">{expense.recorded_by}</td>
-                <td className="px-6 py-4 font-mono font-bold text-slate-900 text-right">
+                <td className="px-4 py-3 text-slate-500">{expense.description}</td>
+                <td className="px-4 py-3 text-xs font-mono text-slate-400">{expense.recorded_by}</td>
+                <td className="px-4 py-3 font-mono font-bold text-slate-900 text-right">
                   ₦{Number(expense.amount_ngn).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-right"><DeleteExpenseButton id={expense.id} /></td>
+                <td className="px-4 py-3 text-right"><DeleteExpenseButton id={expense.id} /></td>
               </tr>
             ))}
             {expenses.length === 0 && (
