@@ -2,14 +2,16 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
 
+/** End a live code now. Two steps; the warning is shown before confirming. */
 export default function RevokeButton({ grantId, voucher }: { grantId: string; voucher: string | null }) {
   const router = useRouter();
+  const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const revoke = async () => {
-    if (!window.confirm(`End access for voucher ${voucher ?? ''} now? The customer is disconnected and cannot log in again. This does not refund the payment.`)) return;
     setBusy(true);
     setError('');
     try {
@@ -18,19 +20,28 @@ export default function RevokeButton({ grantId, voucher }: { grantId: string; vo
       if (!res.ok) setError(data.message || 'That did not work.');
       else router.refresh();
     } catch {
-      setError('Network error.');
+      setError('No connection. Try again.');
     } finally {
       setBusy(false);
+      setArmed(false);
     }
   };
 
+  if (armed) {
+    return (
+      <div className="w-56 rounded-[var(--radius-control)] border border-bad/30 bg-bad-soft p-3 text-left" role="alertdialog" aria-label="Confirm revoke">
+        <p className="text-[13px] leading-snug text-ink">End {voucher ?? 'this code'} now? The customer is disconnected and cannot sign in again. The payment is not refunded.</p>
+        <div className="mt-2 flex gap-2">
+          <Button size="sm" variant="danger" disabled={busy} onClick={revoke}>{busy ? 'Queuing…' : 'Revoke'}</Button>
+          <Button size="sm" variant="secondary" onClick={() => setArmed(false)}>Keep</Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-end gap-1">
-      <button disabled={busy} onClick={revoke}
-        className="px-2 py-1 text-xs font-semibold rounded border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50">
-        {busy ? 'Queuing...' : 'Revoke now'}
-      </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      <Button size="sm" variant="danger" onClick={() => setArmed(true)}>Revoke</Button>
+      {error && <span className="text-[12px] text-bad">{error}</span>}
     </div>
   );
 }
@@ -47,7 +58,7 @@ export function ResendButton({ grantId }: { grantId: string }) {
       const data = await res.json().catch(() => ({}));
       setNote(res.ok ? { ok: true, text: 'Sent to the paying phone.' } : { ok: false, text: data.message || 'That did not work.' });
     } catch {
-      setNote({ ok: false, text: 'Network error.' });
+      setNote({ ok: false, text: 'No connection. Try again.' });
     } finally {
       setBusy(false);
     }
@@ -55,11 +66,8 @@ export function ResendButton({ grantId }: { grantId: string }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button disabled={busy} onClick={resend}
-        className="px-2 py-1 text-xs font-semibold rounded border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-        {busy ? 'Sending...' : 'Resend code'}
-      </button>
-      {note && <span className={`text-xs ${note.ok ? 'text-emerald-700' : 'text-red-600'}`}>{note.text}</span>}
+      <Button size="sm" variant="secondary" disabled={busy} onClick={resend}>{busy ? 'Sending…' : 'Resend code by SMS'}</Button>
+      {note && <span className={`max-w-56 text-right text-[12px] ${note.ok ? 'text-ok' : 'text-bad'}`}>{note.text}</span>}
     </div>
   );
 }

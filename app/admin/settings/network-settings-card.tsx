@@ -2,51 +2,60 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Globe } from 'lucide-react';
-
-const field = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#6d1825]/30';
+import { Field, inputClass, textareaClass } from '@/components/ui/field';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { Panel } from '@/components/ui/panel';
+import { cn } from '@/lib/utils';
 
 export default function NetworkSettingsCard({ portalUrl, hosts }: { portalUrl: string; hosts: string[] }) {
   const router = useRouter();
   const [form, setForm] = useState({ portal_url: portalUrl, walled_garden_hosts: hosts.join('\n') });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const dirty = form.portal_url !== portalUrl || form.walled_garden_hosts.split(/\s+/).filter(Boolean).join(',') !== hosts.join(',');
 
   const save = async () => {
-    if (!window.confirm('Change these for every router? Each configured router gets its hotspot updated by the controller.')) return;
+    setAsking(false);
     setBusy(true); setErrors({}); setMessage(null);
     try {
       const res = await fetch('/api/admin/network/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(form) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setErrors(data.errors ?? {}); setMessage({ ok: false, text: data.message || 'Could not save.' }); }
+      if (!res.ok) { setErrors(data.errors ?? {}); setMessage({ ok: false, text: data.message || 'Not saved.' }); }
       else {
         setMessage({ ok: true, text: data.routersQueued == null ? 'Saved. Routers pick it up when their hotspot is next applied.' : `Saved. Hotspot update queued on ${data.routersQueued} router${data.routersQueued === 1 ? '' : 's'}.` });
         router.refresh();
       }
-    } catch { setMessage({ ok: false, text: 'Network error. Please try again.' }); }
+    } catch { setMessage({ ok: false, text: 'No connection. Try again.' }); }
     finally { setBusy(false); }
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-      <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2"><Globe className="h-4 w-4 text-[#6d1825]" /> Customer portal and walled garden</h2>
-      <p className="text-xs text-slate-600">Used by every router. The login page sends customers to the portal; the sites below open before paying (the portal&apos;s own site is always included).</p>
-      <label className="block space-y-1 text-sm">
-        <span className="font-semibold text-slate-700">Portal address</span>
-        <input className={field} value={form.portal_url} onChange={(e) => setForm({ ...form, portal_url: e.target.value })} />
-        {errors.portal_url && <span className="block text-xs text-red-700">{errors.portal_url}</span>}
-      </label>
-      <label className="block space-y-1 text-sm">
-        <span className="font-semibold text-slate-700">Sites allowed before paying</span>
-        <textarea className={`${field} h-28`} value={form.walled_garden_hosts} onChange={(e) => setForm({ ...form, walled_garden_hosts: e.target.value })} />
-        <span className="block text-xs text-slate-500">One per line. Include every host Korapay&apos;s checkout loads, or payment pages will not open on the WiFi.</span>
-        {errors.walled_garden_hosts && <span className="block text-xs text-red-700">{errors.walled_garden_hosts}</span>}
-      </label>
-      <button disabled={busy} onClick={save} className="px-4 py-2 rounded-lg bg-[#6d1825] text-white text-sm font-semibold hover:bg-[#561320] disabled:opacity-50">
-        {busy ? 'Saving…' : 'Save for all routers'}
-      </button>
-      {message && <p className={`text-sm ${message.ok ? 'text-emerald-700' : 'text-red-700'}`}>{message.text}</p>}
-    </div>
+    <Panel title="Customer portal and sites allowed before paying" description="Used by every router. Each router's sign-in page sends customers to the portal; the sites below open before paying (the portal's own site is always included).">
+      <div className="space-y-5">
+        <Field label="Portal address" htmlFor="ns-portal" error={errors.portal_url}>
+          <input id="ns-portal" className={inputClass} value={form.portal_url} onChange={(e) => setForm({ ...form, portal_url: e.target.value })} />
+        </Field>
+        <Field label="Sites allowed before paying" htmlFor="ns-wg" error={errors.walled_garden_hosts}
+          hint="One per line. Include every host Korapay's checkout loads, or payment pages will not open on the WiFi.">
+          <textarea id="ns-wg" className={cn(textareaClass, 'min-h-28')} value={form.walled_garden_hosts} onChange={(e) => setForm({ ...form, walled_garden_hosts: e.target.value })} />
+        </Field>
+        {asking ? (
+          <div className="rounded-[var(--radius-control)] border border-line bg-canvas p-4" role="alertdialog" aria-label="Confirm">
+            <p className="text-sm font-semibold text-ink">Change these for every router?</p>
+            <p className="mt-0.5 text-sm text-muted">The controller updates the hotspot on each configured router.</p>
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" onClick={save}>Save for all routers</Button>
+              <Button size="sm" variant="secondary" onClick={() => setAsking(false)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <Button disabled={busy || !dirty} onClick={() => setAsking(true)}>{busy ? 'Saving…' : 'Save for all routers'}</Button>
+        )}
+        {message && <Notice tone={message.ok ? 'ok' : 'bad'} title={message.text} />}
+      </div>
+    </Panel>
   );
 }

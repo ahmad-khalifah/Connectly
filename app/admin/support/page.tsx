@@ -1,74 +1,86 @@
+import Link from 'next/link';
 import { db } from '@/lib/db/client';
-import { LifeBuoy, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import TicketStatus from './ticket-status';
+import { PageHeader } from '@/components/admin/page-header';
+import { EmptyRow, lagos, TableFrame, td, th, tr } from '@/components/admin/table';
+import { Badge, type BadgeTone } from '@/components/ui/badge';
+import { Notice } from '@/components/ui/notice';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SupportPage() {
-  const { data: tickets } = await db
-    .from('support_tickets')
-    .select('*, customers(phone_number), locations(name)')
-    .order('created_at', { ascending: false });
+const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
+  open: { label: 'Open', tone: 'bad' },
+  in_progress: { label: 'In progress', tone: 'warn' },
+  resolved: { label: 'Resolved', tone: 'ok' },
+};
+const FILTERS = [
+  { id: 'active', label: 'Needs attention' },
+  { id: 'resolved', label: 'Resolved' },
+  { id: 'all', label: 'All' },
+];
+const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
-  const formattedTickets = tickets || [];
+export default async function SupportPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+  const { show } = await searchParams;
+  const filter = FILTERS.some((f) => f.id === show) ? show! : 'active';
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case 'open':
-        return <span className="flex items-center gap-1 text-red-700 bg-red-50 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border border-red-200"><AlertCircle className="h-3 w-3" /> Open</span>;
-      case 'in_progress':
-        return <span className="flex items-center gap-1 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border border-amber-200"><Clock className="h-3 w-3" /> In Progress</span>;
-      case 'resolved':
-        return <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border border-emerald-200"><CheckCircle2 className="h-3 w-3" /> Resolved</span>;
-      default:
-        return null;
-    }
-  };
+  let q = db.from('support_tickets').select('id, ticket_number, category, subject, description, status, assigned_to, created_at, resolved_at, customers(phone_number), locations(name)').order('created_at', { ascending: false }).limit(200);
+  if (filter === 'active') q = q.in('status', ['open', 'in_progress']);
+  if (filter === 'resolved') q = q.eq('status', 'resolved');
+  const { data: tickets, error } = await q;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <LifeBuoy className="h-6 w-6 text-[#6d1825]" /> Support Desk
-        </h1>
-        <p className="text-sm text-slate-500">Manage customer connection issues and network incidents.</p>
-      </div>
+      <PageHeader
+        title="Support"
+        description="Customer problems and enquiries from the website. Enquiries arrive with their subject starting [Consultancy] or [WiFi for your site]."
+      />
+      <nav aria-label="Ticket status" className="inline-flex flex-wrap rounded-[var(--radius-control)] border border-line bg-surface p-0.5">
+        {FILTERS.map((f) => (
+          <Link key={f.id} href={f.id === 'active' ? '/admin/support' : `/admin/support?show=${f.id}`} aria-current={f.id === filter ? 'true' : undefined}
+            className={cn('rounded-md px-3 py-1.5 text-[13px] font-semibold', f.id === filter ? 'bg-brand text-white' : 'text-muted hover:bg-canvas hover:text-ink')}>
+            {f.label}
+          </Link>
+        ))}
+      </nav>
+      {error && <Notice tone="bad" title="Tickets could not be loaded">Refresh to try again.</Notice>}
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-900 text-xs uppercase tracking-wider font-semibold">
-            <tr>
-              <th className="px-6 py-4">Ticket ID</th>
-              <th className="px-6 py-4">Customer</th>
-              <th className="px-6 py-4">Subject</th>
-              <th className="px-6 py-4">Location</th>
-              <th className="px-6 py-4">Created</th>
-              <th className="px-6 py-4 text-right">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {formattedTickets.map((ticket) => (
-              <tr key={ticket.id} className="hover:bg-slate-50 transition-colors cursor-pointer">
-                <td className="px-6 py-4 font-mono font-bold text-slate-900">#{ticket.ticket_number}</td>
-                <td className="px-6 py-4 font-mono text-slate-700">{ticket.customers?.phone_number || 'Guest'}</td>
-                <td className="px-6 py-4 font-medium text-slate-900">
-                  {ticket.subject}
-                  <span className="block text-xs font-normal text-slate-400 mt-0.5 truncate max-w-xs">{ticket.description}</span>
+      <TableFrame>
+        <thead>
+          <tr>
+            <th className={th}>Ticket</th><th className={th}>From</th><th className={th}>Subject and message</th>
+            <th className={th}>Received</th><th className={th}>Status</th><th className={th}><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {(tickets ?? []).map((t) => {
+            const st = STATUS[t.status ?? 'open'] ?? STATUS.open;
+            const phone = one(t.customers as { phone_number: string } | { phone_number: string }[] | null)?.phone_number;
+            const loc = one(t.locations as { name: string } | { name: string }[] | null)?.name;
+            return (
+              <tr key={t.id} className={tr}>
+                <td className={`${td} tnum font-semibold`}>#{t.ticket_number}</td>
+                <td className={`${td} text-[13px]`}>{phone ? `+${phone}` : 'Website'}{loc && <span className="block text-muted">{loc}</span>}</td>
+                <td className={`${td} max-w-[460px]`}>
+                  <span className="font-semibold text-ink">{t.subject}</span>
+                  <details className="mt-1 text-[13px] text-muted">
+                    <summary className="cursor-pointer select-none font-semibold text-brand">Show message</summary>
+                    <p className="mt-1 whitespace-pre-wrap leading-relaxed">{t.description}</p>
+                  </details>
                 </td>
-                <td className="px-6 py-4 text-xs text-slate-500">{ticket.locations?.name || 'General'}</td>
-                <td className="px-6 py-4 text-xs font-mono text-slate-500">{new Date(ticket.created_at).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })}</td>
-                <td className="px-6 py-4 text-right flex justify-end">{getStatusBadge(ticket.status)}</td>
-              </tr>
-            ))}
-            {formattedTickets.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
-                  No support tickets found.
+                <td className={`${td} tnum whitespace-nowrap text-muted`}>{lagos(t.created_at)}</td>
+                <td className={td}>
+                  <Badge tone={st.tone}>{st.label}</Badge>
+                  {t.assigned_to && <span className="mt-1 block text-[12px] text-subtle">{t.assigned_to}</span>}
                 </td>
+                <td className={`${td} text-right`}><TicketStatus id={t.id} status={t.status ?? 'open'} /></td>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+          {(tickets ?? []).length === 0 && <EmptyRow cols={6}>{filter === 'active' ? 'Nothing needs attention.' : 'No tickets.'}</EmptyRow>}
+        </tbody>
+      </TableFrame>
     </div>
   );
 }
