@@ -36,8 +36,8 @@ export type HotspotPlan = {
   gateway: string;
   cidr: string;          // gateway with prefix, e.g. 10.10.0.1/22
   network: string;       // 10.10.0.0/22
-  poolRange: string;     // 10.10.0.12-10.10.3.254
-  equipmentRange: string | null; // 10.10.0.2-10.10.0.11: fixed addresses for access points and switches
+  poolRange: string;     // 10.10.0.12-10.10.3.254 (RouterOS: comma-separated ranges)
+  equipmentRange: string; // 10.10.0.2-10.10.0.11: fixed addresses for access points and switches
   dnsName: string;
   walledGarden: string[];
   loginHtml: string;
@@ -65,11 +65,19 @@ export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: Por
   const net = (g & mask) >>> 0;
   const bcast = (net | (~mask >>> 0)) >>> 0;
   // Customers get every address except the network, the broadcast, the gateway
-  // and a small block beside the gateway kept for equipment (access points,
-  // switches) with fixed addresses. Keep in step with lib/network/hotspot.ts.
+  // and a small block kept for equipment (access points, switches) with fixed
+  // addresses: just after the gateway, or just before it when the gateway is
+  // at the top. Keep in step with lib/network/hotspot.ts.
   const reserve = equipmentReserve(prefix);
-  const [start, end] = g === net + 1 ? [net + 2 + reserve, bcast - 1] : [net + 1, g - 1 - reserve];
-  const equipment = reserve === 0 ? null : g === net + 1 ? `${intToIp(net + 2)}-${intToIp(net + 1 + reserve)}` : `${intToIp(g - reserve)}-${intToIp(g - 1)}`;
+  const [eqFrom, eqTo] = g + reserve < bcast ? [g + 1, g + reserve] : [g - reserve, g - 1];
+  const spans: [number, number][] = [];
+  const addSpan = (a: number, b: number) => { if (a <= b) spans.push([a, b]); };
+  // Free addresses: (net, bcast) minus the gateway and the equipment block.
+  const taken = [[Math.min(g, eqFrom), Math.max(g, eqTo)]] as const; // gateway and block are adjacent
+  addSpan(net + 1, taken[0][0] - 1);
+  addSpan(taken[0][1] + 1, bcast - 1);
+  const poolRange = spans.map(([a, b]) => (a === b ? intToIp(a) : `${intToIp(a)}-${intToIp(b)}`)).join(',');
+  const equipment = `${intToIp(eqFrom)}-${intToIp(eqTo)}`;
 
   const portal = new URL(p.portal_url);
   const hosts = [...new Set([portal.hostname, ...p.walled_garden_hosts, ...s.extra_walled_garden].map((h) => h.toLowerCase()))].sort();
@@ -89,7 +97,7 @@ export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: Por
     gateway,
     cidr: `${gateway}/${prefix}`,
     network: `${intToIp(net)}/${prefix}`,
-    poolRange: `${intToIp(start)}-${intToIp(end)}`,
+    poolRange,
     equipmentRange: equipment,
     dnsName: s.dns_name,
     walledGarden: hosts,

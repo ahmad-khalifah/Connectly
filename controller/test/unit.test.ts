@@ -134,6 +134,15 @@ test('hotspot plan: pool skips network, gateway and broadcast; walled garden mer
     { portal_url: 'https://x.example.com/p', walled_garden_hosts: [] });
   assert.equal(q.poolRange, '192.168.50.1-192.168.50.243', 'gateway at the top: pool below it');
   assert.equal(q.equipmentRange, '192.168.50.244-192.168.50.253');
+  // Gateway in the middle (the CHR lab's 192.168.57.10/24): block after it, pool on both sides.
+  const mid = planHotspot('r', { lan_interface: 'ether3', gateway_cidr: '192.168.57.10/24', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
+    { portal_url: 'https://x.example/portal', walled_garden_hosts: [] });
+  assert.equal(mid.equipmentRange, '192.168.57.11-192.168.57.20');
+  assert.equal(mid.poolRange, '192.168.57.1-192.168.57.9,192.168.57.21-192.168.57.254');
+  // Small network, gateway first.
+  const small = planHotspot('r', { lan_interface: 'ether2', gateway_cidr: '10.20.0.1/28', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
+    { portal_url: 'https://x.example/portal', walled_garden_hosts: [] });
+  assert.deepEqual([small.equipmentRange, small.poolRange], ['10.20.0.2-10.20.0.3', '10.20.0.4-10.20.0.14']);
   assert.deepEqual(q.walledGarden, ['x.example.com'], 'the payment page host is always reachable');
 });
 

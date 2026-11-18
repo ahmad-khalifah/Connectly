@@ -28,7 +28,11 @@ export function JobStatusBadge({ value }: { value: string }) {
 }
 
 /** Health comes only from the controller; a router it has never reached is "unknown". */
-export function HealthBadge({ value, lastSeen }: { value: string | null; lastSeen: string | null }) {
+export function HealthBadge({ value, lastSeen, lifecycle }: { value: string | null; lastSeen: string | null; lifecycle?: string }) {
+  // Health is checked only for active routers; before that, show when it was last reached (Test Connection).
+  if (lifecycle && lifecycle !== 'active') {
+    return <span className="text-xs text-slate-500">Checked once active{lastSeen ? <span className="text-slate-400"> · last reached {ago(lastSeen)}</span> : null}</span>;
+  }
   if (!lastSeen) return <span className="text-xs text-slate-400">Never seen</span>;
   const cls = value === 'online' ? 'text-emerald-700' : value === 'degraded' ? 'text-amber-700' : 'text-red-700';
   return <span className={`text-xs font-semibold ${cls}`}>{value ?? 'unknown'} <span className="font-normal text-slate-400">· {ago(lastSeen)}</span></span>;

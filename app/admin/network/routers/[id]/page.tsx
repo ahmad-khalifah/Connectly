@@ -108,11 +108,10 @@ export default async function RouterDetailPage({ params }: { params: Promise<{ i
           {r.connection_method === 'wireguard' && (
             <p className="font-mono text-[11px] text-slate-500 break-all">{r.wg_public_key ? `key ${r.wg_public_key}` : 'router key not added yet'}</p>
           )}
-          <p className="text-xs text-slate-500">hotspot server {r.hotspot_server_name ?? '—'}</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Health</p>
-          <HealthBadge value={r.status} lastSeen={r.last_seen_at} />
+          <HealthBadge value={r.status} lastSeen={r.last_seen_at} lifecycle={lifecycle} />
           <p className="text-xs text-slate-500">RouterOS {r.routeros_version ?? '—'} · {r.board_name ?? 'board unknown'}</p>
           <p className="text-xs">
             Last test: {r.last_test_at ? <>{test?.ok ? <span className="text-emerald-700 font-semibold">passed</span> : <span className="text-red-700 font-semibold">failed</span>} {fmtTime(r.last_test_at)}</> : 'never run'}

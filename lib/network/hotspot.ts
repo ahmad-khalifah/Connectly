@@ -57,7 +57,8 @@ export function describeNetwork(gatewayCidr: string): string | null {
   const net = (a & mask) >>> 0;
   const bcast = (net | (~mask >>> 0)) >>> 0;
   if (a === net || a === bcast) return null;
-  const eq = a === net + 1 ? `${toIp(net + 2)}–${toIp(net + 1 + reserve)}` : `${toIp(a - reserve)}–${toIp(a - 1)}`;
+  const [from, to] = a + reserve < bcast ? [a + 1, a + reserve] : [a - reserve, a - 1];
+  const eq = `${toIp(from)}–${toIp(to)}`;
   return `${size.toLocaleString('en-NG')} customer devices at once; ${eq} kept for access points and switches`;
 }
 

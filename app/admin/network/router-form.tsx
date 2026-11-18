@@ -85,7 +85,7 @@ export default function RouterForm(props: Props) {
           <select id="r-method" className={`${input} bg-white`} value={form.connectionMethod}
             onChange={(e) => set({ connectionMethod: e.target.value as typeof form.connectionMethod })}>
             <option value="wireguard">WireGuard tunnel to the controller (recommended)</option>
-            <option value="direct_https">Direct HTTPS (site with a public IP)</option>
+            <option value="direct_https">Direct HTTPS (management network or public IP)</option>
           </select>
         </div>
       </div>
@@ -104,18 +104,13 @@ export default function RouterForm(props: Props) {
         </div>
       ) : (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="r-host">Public hostname or IP</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="r-host">Management address (IP or hostname)</label>
           <input id="r-host" required maxLength={253} className={`${input} font-mono`}
             value={form.managementHost} onChange={(e) => set({ managementHost: e.target.value.trim() })} />
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="r-hs">Hotspot server name</label>
-          <input id="r-hs" maxLength={64} className={`${input} font-mono`} value={form.hotspotServerName}
-            onChange={(e) => set({ hotspotServerName: e.target.value })} />
-        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="r-model">Model (optional)</label>
           <input id="r-model" maxLength={100} placeholder="e.g., hAP ax3" className={input}

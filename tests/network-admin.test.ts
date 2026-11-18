@@ -458,6 +458,7 @@ describe('hotspot address plan shown to the admin', () => {
     expect(describeNetwork('10.10.0.1/22')).toBe('1,011 customer devices at once; 10.10.0.2–10.10.0.11 kept for access points and switches');
     expect(describeNetwork('192.168.50.254/24')).toBe('243 customer devices at once; 192.168.50.244–192.168.50.253 kept for access points and switches');
     expect(describeNetwork('10.20.0.1/28')).toBe('11 customer devices at once; 10.20.0.2–10.20.0.3 kept for access points and switches');
+    expect(describeNetwork('192.168.57.10/24')).toBe('243 customer devices at once; 192.168.57.11–192.168.57.20 kept for access points and switches');
     expect(describeNetwork('10.10.0.0/22')).toBeNull();
   });
 });

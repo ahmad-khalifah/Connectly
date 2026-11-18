@@ -123,7 +123,7 @@ export default async function NetworkPage() {
                     </td>
                     <td className="px-4 py-3">{loc?.name ?? '—'}</td>
                     <td className="px-4 py-3"><LifecycleBadge value={r.lifecycle_status} /></td>
-                    <td className="px-4 py-3"><HealthBadge value={r.status} lastSeen={r.last_seen_at} /></td>
+                    <td className="px-4 py-3"><HealthBadge value={r.status} lastSeen={r.last_seen_at} lifecycle={r.lifecycle_status} /></td>
                     <td className="px-4 py-3 font-mono text-xs">{r.connection_method === 'wireguard' ? r.tunnel_ip ?? '—' : 'direct HTTPS'}</td>
                     <td className="px-4 py-3 text-xs">
                       {r.last_test_at ? <>{r.last_test_result?.ok ? <span className="text-emerald-700 font-semibold">Passed</span> : <span className="text-red-700 font-semibold">Failed</span>} {fmtTime(r.last_test_at)}</> : 'Never'}
