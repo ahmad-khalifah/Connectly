@@ -43,7 +43,16 @@ export async function reconcilePurchase(reference: string): Promise<{ outcome: R
     });
     if (error) throw new Error(`confirm_payment failed: ${error.message}`);
     const outcome = (data as { outcome: ReconcileOutcome }).outcome;
-    if (outcome === 'paid') await sendPaymentConfirmation(purchase.id);
+    if (outcome === 'paid') {
+      // The payment and the access grant are already committed. Nothing about
+      // the SMS (Termii down, sender ID not approved, a database hiccup while
+      // recording it) may turn a confirmed payment into an error response.
+      try {
+        await sendPaymentConfirmation(purchase.id);
+      } catch (err) {
+        console.error('[SMS_CONFIRMATION_ERROR]', reference, err);
+      }
+    }
     if (outcome === 'amount_mismatch' || outcome === 'currency_mismatch') {
       console.error('[PAYMENT_MISMATCH]', reference, JSON.stringify(data));
       await logActivity('payment_mismatch', 'error', `Payment ${reference} did not match: ${outcome}`, data);

@@ -107,6 +107,26 @@ describe('reconcilePurchase', () => {
     expect(update?.values).toMatchObject({ status: 'failed', last_error: 'Termii 400' });
     expect(fake.ops.some((o) => o.table === 'purchases' && o.action === 'update')).toBe(false);
   });
+  it('still reports paid when recording the SMS throws (payment and access are never blocked by SMS)', async () => {
+    fake = createFakeDb(purchaseRow('pending'), () => ({ data: { outcome: 'paid' }, error: null }));
+    verifyCharge.mockResolvedValue({ reference: REF, status: 'success', amountPaidKobo: 25000, feeKobo: 0, currency: 'NGN', providerReference: null });
+    sendTermiiSMS.mockRejectedValue(new Error('socket hang up'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { reconcilePurchase } = await import('@/lib/payments/ledger');
+    expect((await reconcilePurchase(REF)).outcome).toBe('paid');
+    expect(spy.mock.calls.some((c) => c[0] === '[SMS_CONFIRMATION_ERROR]')).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('reports paid when Termii is not configured yet (sender ID pending approval)', async () => {
+    fake = createFakeDb(purchaseRow('pending'), () => ({ data: { outcome: 'paid' }, error: null }));
+    verifyCharge.mockResolvedValue({ reference: REF, status: 'success', amountPaidKobo: 25000, feeKobo: 0, currency: 'NGN', providerReference: null });
+    sendTermiiSMS.mockResolvedValue({ ok: false, error: 'Termii is not configured (TERMII_API_KEY / TERMII_SENDER_ID)' });
+    const { reconcilePurchase } = await import('@/lib/payments/ledger');
+    expect((await reconcilePurchase(REF)).outcome).toBe('paid');
+    const update = fake.ops.find((o) => o.table === 'notifications' && o.action === 'update');
+    expect(update?.values).toMatchObject({ status: 'failed' });
+  });
 });
 
 // ------------------------------------------------------------------ webhook
