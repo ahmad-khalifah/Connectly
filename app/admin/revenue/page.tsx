@@ -64,8 +64,7 @@ export default async function RevenueAnalyticsPage() {
           </div>
           <div className="p-12 text-center flex flex-col items-center justify-center text-slate-400 min-h-[250px]">
             <Activity className="h-8 w-8 mb-3 opacity-50" />
-            <p className="text-sm">Aggregate charting requires a visualization library.</p>
-            <p className="text-xs mt-1">Integrate Recharts to render monthly revenue distributions.</p>
+            <p className="text-sm">Revenue over time is on the Dashboard chart.</p>
           </div>
         </div>
       </div>
