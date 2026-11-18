@@ -64,7 +64,15 @@ async function main() {
     server = http.createServer(createBootstrapHandler({ db, keys, log, controllerIp: async () => (await db.readTunnelSettings()).controller_tunnel_ip, allowDirect: cfg.bootstrapAllowDirect }));
     server.headersTimeout = 10_000;
     server.requestTimeout = 15_000;
-    await new Promise<void>((resolve) => server!.listen(cfg.bootstrap!.port, cfg.bootstrap!.host, resolve));
+    await new Promise<void>((resolve, reject) => {
+      server!.once('error', (e: NodeJS.ErrnoException) => reject(new ConfigError(
+        e.code === 'EADDRNOTAVAIL'
+          ? `BOOTSTRAP_LISTEN ${cfg.bootstrap!.host} is not an address of this machine right now (is the network to the routers connected?).`
+          : e.code === 'EADDRINUSE'
+            ? `BOOTSTRAP_LISTEN port ${cfg.bootstrap!.port} is already in use (another controller or lab running?).`
+            : `Could not listen on BOOTSTRAP_LISTEN ${cfg.bootstrap!.host}:${cfg.bootstrap!.port}: ${e.message}`)));
+      server!.listen(cfg.bootstrap!.port, cfg.bootstrap!.host, resolve);
+    });
     log.info('bootstrap.listening', cfg.bootstrap);
   }
 
