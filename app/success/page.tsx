@@ -6,16 +6,19 @@ import PaymentStatus from './payment-status';
 export default async function SuccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reference?: string }>;
+  searchParams: Promise<{ reference?: string | string[] }>;
 }) {
-  const { reference } = await searchParams;
-  const valid = typeof reference === 'string' && /^CONN_[0-9a-f-]{36}$/i.test(reference);
+  // Korapay appends its own ?reference= to our redirect URL, so the page can
+  // receive the parameter twice (found on staging, 18 Nov). Use ours: CONN_<uuid>.
+  const raw = (await searchParams).reference;
+  const reference = (Array.isArray(raw) ? raw : [raw]).find((r): r is string => typeof r === 'string' && /^CONN_[0-9a-f-]{36}$/i.test(r));
+  const valid = Boolean(reference);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
         {valid ? (
-          <PaymentStatus reference={reference} />
+          <PaymentStatus reference={reference!} />
         ) : (
           <>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">No payment reference</h1>
