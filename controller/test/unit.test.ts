@@ -123,12 +123,14 @@ test('hotspot plan: pool skips network, gateway and broadcast; walled garden mer
   const p = planHotspot('cx-garki-01', { lan_interface: 'ether2', gateway_cidr: '10.10.0.1/22', dns_name: 'wifi.getconnectly.net', extra_walled_garden: ['*.paystack.co'], version: 1 },
     { portal_url: 'https://getconnectly.net/portal', walled_garden_hosts: ['checkout.korapay.com', 'getconnectly.net'] });
   assert.equal(p.network, '10.10.0.0/22');
-  assert.equal(p.poolRange, '10.10.0.2-10.10.3.254');
+  assert.equal(p.poolRange, '10.10.0.12-10.10.3.254');
+  assert.equal(p.equipmentRange, '10.10.0.2-10.10.0.11', '10 fixed addresses kept for access points and switches');
   assert.deepEqual(p.walledGarden, ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
   assert.match(p.loginHtml, /url=https:\/\/getconnectly\.net\/portal\?router=cx-garki-01&mac=\$\(mac-esc\)&ip=\$\(ip\)&link=\$\(link-login-only-esc\)/);
   const q = planHotspot('r', { lan_interface: 'bridge1', gateway_cidr: '192.168.50.254/24', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
     { portal_url: 'https://x.example.com/p', walled_garden_hosts: [] });
-  assert.equal(q.poolRange, '192.168.50.1-192.168.50.253', 'gateway at the top: pool below it');
+  assert.equal(q.poolRange, '192.168.50.1-192.168.50.243', 'gateway at the top: pool below it');
+  assert.equal(q.equipmentRange, '192.168.50.244-192.168.50.253');
   assert.deepEqual(q.walledGarden, ['x.example.com'], 'the payment page host is always reachable');
 });
 

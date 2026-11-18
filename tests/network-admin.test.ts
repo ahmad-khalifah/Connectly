@@ -451,3 +451,27 @@ describe('hotspot settings', () => {
     expect(fake.ops.some((o) => o.action === 'upsert')).toBe(false);
   });
 });
+
+describe('hotspot address plan shown to the admin', () => {
+  it('keeps a block beside the gateway for access points and switches', async () => {
+    const { describeNetwork } = await import('@/lib/network/hotspot');
+    expect(describeNetwork('10.10.0.1/22')).toBe('1,011 customer devices at once; 10.10.0.2–10.10.0.11 kept for access points and switches');
+    expect(describeNetwork('192.168.50.254/24')).toBe('243 customer devices at once; 192.168.50.244–192.168.50.253 kept for access points and switches');
+    expect(describeNetwork('10.20.0.1/28')).toBe('11 customer devices at once; 10.20.0.2–10.20.0.3 kept for access points and switches');
+    expect(describeNetwork('10.10.0.0/22')).toBeNull();
+  });
+});
+
+describe('direct router set-up lines', () => {
+  it('names the router, fetches only its own bootstrap file, and holds no password', async () => {
+    const { buildDirectSetupLines } = await import('@/lib/network/setup-script');
+    const lines = buildDirectSetupLines({ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', identifier: 'cx-garki-01' }, '192.168.88.10');
+    expect(lines).toBe([
+      '/system identity set name="cx-garki-01"',
+      '/tool fetch url="http://192.168.88.10:8080/bootstrap/dddddddd-dddd-4ddd-8ddd-dddddddddddd" dst-path=cx.rsc',
+      '/import cx.rsc',
+      '/file remove cx.rsc',
+    ].join('\n'));
+    expect(lines).not.toMatch(/password/i);
+  });
+});

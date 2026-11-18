@@ -4,7 +4,7 @@ import { Server, KeyRound, Terminal, ListChecks, CheckCircle2, Circle } from 'lu
 import { db } from '@/lib/db/client';
 import { isUuid } from '@/lib/admin/inputs';
 import { activationBlockers, ROUTER_PUBLIC_COLUMNS, type ConnectionMethod, type Lifecycle } from '@/lib/network/routers';
-import { buildSetupScript } from '@/lib/network/setup-script';
+import { buildSetupScript, buildDirectSetupLines, CONTROLLER_ADDRESS_PLACEHOLDER } from '@/lib/network/setup-script';
 import { JOB_LABELS } from '@/lib/network/jobs';
 import RouterActions from '../../router-actions';
 import CopyBlock from '../../copy-block';
@@ -160,6 +160,22 @@ export default async function RouterDetailPage({ params }: { params: Promise<{ i
             <p className="text-xs text-amber-700">Not ready yet. Still needed: {setup.missing.join('; ')}.</p>
           )}
           <CopyBlock text={setup.script} />
+        </div>
+      )}
+
+      {r.connection_method === 'direct_https' && lifecycle !== 'retired' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2"><Terminal className="h-4 w-4 text-[#6d1825]" /> Engineer set-up lines (direct router)</h2>
+          {hasCredential ? (
+            <p className="text-xs text-slate-600">
+              Type these in the router&apos;s terminal, replacing <span className="font-mono">{CONTROLLER_ADDRESS_PLACEHOLDER}</span> with the address of the computer running
+              the controller on this router&apos;s management network. They contain no password: the router collects its credential from the controller, which
+              answers only this router&apos;s management address <span className="font-mono">{r.management_ip}</span>, and only on a private network.
+            </p>
+          ) : (
+            <p className="text-xs text-amber-700">Issue the API credential first.</p>
+          )}
+          <CopyBlock text={buildDirectSetupLines({ id: r.id, identifier: r.identifier })} />
         </div>
       )}
 

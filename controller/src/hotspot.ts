@@ -36,7 +36,8 @@ export type HotspotPlan = {
   gateway: string;
   cidr: string;          // gateway with prefix, e.g. 10.10.0.1/22
   network: string;       // 10.10.0.0/22
-  poolRange: string;     // 10.10.0.2-10.10.3.254
+  poolRange: string;     // 10.10.0.12-10.10.3.254
+  equipmentRange: string | null; // 10.10.0.2-10.10.0.11: fixed addresses for access points and switches
   dnsName: string;
   walledGarden: string[];
   loginHtml: string;
@@ -50,6 +51,11 @@ const WG_TAG = 'connectly';
 const ipToInt = (ip: string) => ip.split('.').reduce((n, o) => (n << 8) + Number(o), 0) >>> 0;
 const intToIp = (n: number) => [24, 16, 8, 0].map((s) => (n >>> s) & 255).join('.');
 
+/** Addresses kept beside the gateway for equipment: 10 on /26 or larger, 2 on /27 and /28. */
+export function equipmentReserve(prefix: number): number {
+  return prefix <= 26 ? 10 : 2;
+}
+
 export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: PortalSettings): HotspotPlan {
   const [gateway, prefixRaw] = s.gateway_cidr.split('/');
   const prefix = Number(prefixRaw);
@@ -58,8 +64,12 @@ export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: Por
   const g = ipToInt(gateway);
   const net = (g & mask) >>> 0;
   const bcast = (net | (~mask >>> 0)) >>> 0;
-  // Customers get every address except the network, the broadcast and the gateway.
-  const [start, end] = g === net + 1 ? [net + 2, bcast - 1] : [net + 1, g - 1];
+  // Customers get every address except the network, the broadcast, the gateway
+  // and a small block beside the gateway kept for equipment (access points,
+  // switches) with fixed addresses. Keep in step with lib/network/hotspot.ts.
+  const reserve = equipmentReserve(prefix);
+  const [start, end] = g === net + 1 ? [net + 2 + reserve, bcast - 1] : [net + 1, g - 1 - reserve];
+  const equipment = reserve === 0 ? null : g === net + 1 ? `${intToIp(net + 2)}-${intToIp(net + 1 + reserve)}` : `${intToIp(g - reserve)}-${intToIp(g - 1)}`;
 
   const portal = new URL(p.portal_url);
   const hosts = [...new Set([portal.hostname, ...p.walled_garden_hosts, ...s.extra_walled_garden].map((h) => h.toLowerCase()))].sort();
@@ -80,6 +90,7 @@ export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: Por
     cidr: `${gateway}/${prefix}`,
     network: `${intToIp(net)}/${prefix}`,
     poolRange: `${intToIp(start)}-${intToIp(end)}`,
+    equipmentRange: equipment,
     dnsName: s.dns_name,
     walledGarden: hosts,
     loginHtml,

@@ -307,7 +307,7 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.equal((await job(id1)).status, 'succeeded', (await job(id1)).last_error);
     const m = (p: string) => r.fake.menus.get(p) ?? [];
     assert.equal(m('/ip/address')[0]!.address, '10.10.0.1/22');
-    assert.equal(m('/ip/pool')[0]!.ranges, '10.10.0.2-10.10.3.254');
+    assert.equal(m('/ip/pool')[0]!.ranges, '10.10.0.12-10.10.3.254');
     assert.equal(m('/ip/hotspot')[0]!.interface, 'ether2');
     assert.equal(m('/ip/hotspot/profile')[0]!['dns-name'], 'wifi.getconnectly.net');
     assert.equal(r.fake.dns['allow-remote-requests'], 'true');

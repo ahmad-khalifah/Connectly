@@ -38,14 +38,27 @@ function ip(s: string): number {
 const maskOf = (prefix: number) => (prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0);
 const inRange = (addr: number, net: number, prefix: number) => ((addr & maskOf(prefix)) >>> 0) === net;
 
+/** Addresses kept beside the gateway for access points and switches. Same rule as controller/src/hotspot.ts. */
+export function equipmentReserve(prefix: number): number {
+  return prefix <= 26 ? 10 : 2;
+}
+
+const toIp = (n: number) => [24, 16, 8, 0].map((s) => (n >>> s) & 255).join('.');
+
 /** What the gateway setting means, for the form's help text. */
 export function describeNetwork(gatewayCidr: string): string | null {
   const [g, p] = gatewayCidr.split('/');
   const a = ip(g ?? '');
   const prefix = Number(p);
   if (Number.isNaN(a) || !Number.isInteger(prefix) || prefix < 16 || prefix > 28) return null;
-  const size = 2 ** (32 - prefix) - 3; // minus network, broadcast and the gateway itself
-  return `${size.toLocaleString('en-NG')} customer devices at once`;
+  const reserve = equipmentReserve(prefix);
+  const size = 2 ** (32 - prefix) - 3 - reserve; // minus network, broadcast, the gateway and the equipment block
+  const mask = maskOf(prefix);
+  const net = (a & mask) >>> 0;
+  const bcast = (net | (~mask >>> 0)) >>> 0;
+  if (a === net || a === bcast) return null;
+  const eq = a === net + 1 ? `${toIp(net + 2)}–${toIp(net + 1 + reserve)}` : `${toIp(a - reserve)}–${toIp(a - 1)}`;
+  return `${size.toLocaleString('en-NG')} customer devices at once; ${eq} kept for access points and switches`;
 }
 
 /** A walled-garden host: pay.example.com or *.example.com. */

@@ -65,3 +65,22 @@ export const PRE_REGISTRATION_STEPS = [
   `/interface wireguard add name=${WG_INTERFACE} listen-port=13231 comment="Connectly controller"`,
   `/interface wireguard print where name=${WG_INTERFACE}`,
 ].join('\n');
+
+/**
+ * Set-up lines for a direct (non-WireGuard) router on a private management
+ * network. The router collects its API credential from the controller's
+ * bootstrap endpoint, which serves direct routers only when the controller
+ * runs with BOOTSTRAP_ALLOW_DIRECT=yes on a private address, and only to the
+ * router's registered management address. Contains no password.
+ */
+export const CONTROLLER_ADDRESS_PLACEHOLDER = 'CONTROLLER-ADDRESS';
+
+export function buildDirectSetupLines(router: { id: string; identifier: string }, controllerAddress = CONTROLLER_ADDRESS_PLACEHOLDER): string {
+  const ros = (s: string) => s.replace(/[\\"$]/g, (c) => `\\${c}`);
+  return [
+    `/system identity set name="${ros(router.identifier)}"`,
+    `/tool fetch url="http://${controllerAddress}:8080/bootstrap/${router.id}" dst-path=cx.rsc`,
+    '/import cx.rsc',
+    '/file remove cx.rsc',
+  ].join('\n');
+}
