@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { appUrl } from '@/lib/env';
 import { db } from '@/lib/db/client';
 import { requestTime } from '@/lib/time';
+import { routerHealth } from '@/lib/admin/router-health';
 import { PageHeader } from '@/components/admin/page-header';
 import { EmptyRow, TableFrame, td, th, tr } from '@/components/admin/table';
 import { ButtonLink } from '@/components/ui/button';
@@ -13,14 +14,14 @@ export const dynamic = 'force-dynamic';
 type Loc = {
   id: string; name: string; slug: string; status: string | null; is_active: boolean | null;
   institutions: { name: string } | { name: string }[] | null;
-  routers: { id: string; status: string | null; lifecycle_status: string }[] | null;
+  routers: { id: string; status: string | null; lifecycle_status: string; last_seen_at: string | null }[] | null;
   purchases: { status: string; amount_paid: number | null; amount_kobo: number | null; network_authorizations: { status: string; revoked_at: string | null; expires_at: string }[] | null }[] | null;
 };
 
 export default async function LocationsPage() {
   const { data, error } = await db
     .from('locations')
-    .select('id, name, slug, status, is_active, institutions(name), routers(id, status, lifecycle_status), purchases(status, amount_paid, amount_kobo, network_authorizations(status, revoked_at, expires_at))')
+    .select('id, name, slug, status, is_active, institutions(name), routers(id, status, lifecycle_status, last_seen_at), purchases(status, amount_paid, amount_kobo, network_authorizations(status, revoked_at, expires_at))')
     .order('name', { ascending: true });
 
   const now = requestTime();
@@ -30,7 +31,7 @@ export default async function LocationsPage() {
     const revenue = purchases.filter((p) => p.status === 'paid').reduce((s, p) => s + (p.amount_paid !== null ? Number(p.amount_paid) : (p.amount_kobo ?? 0) / 100), 0);
     const active = (l.routers ?? []).filter((r) => r.lifecycle_status === 'active');
     const inst = Array.isArray(l.institutions) ? l.institutions[0] : l.institutions;
-    return { ...l, running, revenue, routersOnline: active.filter((r) => r.status === 'online').length, routersActive: active.length, routersTotal: (l.routers ?? []).filter((r) => r.lifecycle_status !== 'retired').length, institution: inst?.name ?? null };
+    return { ...l, running, revenue, routersOnline: active.filter((r) => routerHealth(r.status, r.last_seen_at, now).label === 'Online').length, routersActive: active.length, routersTotal: (l.routers ?? []).filter((r) => r.lifecycle_status !== 'retired').length, institution: inst?.name ?? null };
   });
   const base = appUrl();
 

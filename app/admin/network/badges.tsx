@@ -1,5 +1,7 @@
 // Small display helpers shared by the network pages (server components).
 import { Badge, type BadgeTone } from '@/components/ui/badge';
+import { routerHealth } from '@/lib/admin/router-health';
+import { requestTime } from '@/lib/time';
 
 const LIFECYCLE: Record<string, { label: string; tone: BadgeTone }> = {
   registered: { label: 'Registered', tone: 'neutral' },
@@ -32,9 +34,12 @@ export function HealthBadge({ value, lastSeen, lifecycle }: { value: string | nu
     return <span className="text-[13px] text-muted">Checked once active{lastSeen ? <span className="text-subtle">, last reached {ago(lastSeen)}</span> : null}</span>;
   }
   if (!lastSeen) return <span className="text-[13px] text-subtle">Never seen</span>;
-  const tone: BadgeTone = value === 'online' ? 'ok' : value === 'degraded' ? 'warn' : 'bad';
-  const label = value === 'online' ? 'Online' : value === 'degraded' ? 'Degraded' : 'Offline';
-  return <span className="inline-flex items-center gap-2"><Badge tone={tone}>{label}</Badge><span className="text-[12.5px] text-subtle">{ago(lastSeen)}</span></span>;
+  const h = routerHealth(value, lastSeen, requestTime());
+  return (
+    <span className="inline-flex items-center gap-2" title={h.stale ? 'The controller has not checked this router in the last 5 minutes, so its last status is not shown as current.' : undefined}>
+      <Badge tone={h.tone}>{h.label}</Badge><span className="text-[12.5px] text-subtle">{h.stale ? 'last checked ' : ''}{ago(lastSeen)}</span>
+    </span>
+  );
 }
 
 export const fmtTime = (iso: string | null) =>

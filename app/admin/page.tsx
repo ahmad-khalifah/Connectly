@@ -12,6 +12,7 @@ import { DashboardFilters } from '@/components/admin/dashboard-filters';
 import { RevenueChart } from '@/components/admin/revenue-chart';
 import { Panel } from '@/components/ui/panel';
 import { Notice } from '@/components/ui/notice';
+import { routerHealth } from '@/lib/admin/router-health';
 import { Badge } from '@/components/ui/badge';
 
 export const dynamic = 'force-dynamic';
@@ -77,7 +78,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
             {(activityRes.data ?? []).length === 0 && <li className="px-5 py-8 text-center text-sm text-muted">Nothing recorded yet.</li>}
           </ul>
         </Panel>
-        <Panel title="Routers" description="Health from the controller's check every minute." flush className="lg:col-span-2"
+        <Panel title="Routers" description="Health from the controller's check every minute. A router not checked for 5 minutes shows No recent check." flush className="lg:col-span-2"
           action={<Link href="/admin/network" className="text-sm font-semibold text-brand hover:underline">Manage</Link>}>
           <ul className="divide-y divide-line">
             {routers.map((r) => (
@@ -89,7 +90,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                   </span>
                 </span>
                 {r.lifecycle_status === 'active' ? (
-                  <Badge tone={r.status === 'online' ? 'ok' : 'bad'}>{r.status === 'online' ? 'Online' : 'Offline'}</Badge>
+                  <Badge tone={routerHealth(r.status, r.last_seen_at, now.getTime()).tone}>{routerHealth(r.status, r.last_seen_at, now.getTime()).label}</Badge>
                 ) : (
                   <Badge>Not checked</Badge>
                 )}

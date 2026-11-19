@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/admin/page-header';
 import { Stat, StatGrid } from '@/components/admin/stat-grid';
 import { EmptyRow, lagos, TableFrame, td, th, tr } from '@/components/admin/table';
 import { Panel } from '@/components/ui/panel';
+import { routerHealth } from '@/lib/admin/router-health';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { ButtonLink } from '@/components/ui/button';
 
@@ -66,7 +67,7 @@ export default async function LocationDetailPage({ params }: { params: Promise<{
 
       <StatGrid cols={4}>
         <Stat label="Plans running now" value={running ?? 0} how="Paid codes on this location's routers whose end time is still ahead and that were not revoked." />
-        <Stat label="Routers online" value={active.length ? `${active.filter((r) => r.status === 'online').length} of ${active.length}` : 'None active'} how="Active routers by the controller's latest health check." />
+        <Stat label="Routers online" value={active.length ? `${active.filter((r) => routerHealth(r.status, r.last_seen_at, Date.parse(now)).label === 'Online').length} of ${active.length}` : 'None active'} how="Active routers the controller found online in the last 5 minutes." />
         <Stat label="Paid revenue, all time" value={revenue === null ? '—' : `₦${revenue.toLocaleString('en-NG')}`} note={revenue === null ? 'Could not be loaded' : undefined} />
         <Stat label="Paid purchases" value={paid?.length ?? '—'} />
       </StatGrid>
@@ -88,7 +89,7 @@ export default async function LocationDetailPage({ params }: { params: Promise<{
                     </span>
                   )}
                 </span>
-                {r.lifecycle_status === 'active' ? <Badge tone={r.status === 'online' ? 'ok' : 'bad'}>{r.status === 'online' ? 'Online' : 'Offline'}</Badge> : <Badge>Not active yet</Badge>}
+                {r.lifecycle_status === 'active' ? <Badge tone={routerHealth(r.status, r.last_seen_at, Date.parse(now)).tone}>{routerHealth(r.status, r.last_seen_at, Date.parse(now)).label}</Badge> : <Badge>Not active yet</Badge>}
               </li>
             ))}
             {routers.length === 0 && <li className="px-5 py-8 text-center text-sm text-muted">No router here yet.</li>}
