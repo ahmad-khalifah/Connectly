@@ -12,7 +12,7 @@ export async function loadMetricInput(): Promise<MetricInput> {
     all((f, t) => db.from('expenses').select('amount_ngn, expense_date, location_id').order('expense_date').range(f, t)),
     all<RawGrant>((f, t) => db.from('network_authorizations').select('status, expires_at, revoked_at, revoke_reason, router_id, purchases(phone_number)').order('created_at').range(f, t)),
     all((f, t) => db.from('customers').select('created_at').order('created_at').range(f, t)),
-    all<{ id: string; status: string | null; lifecycle_status: string; location_id: string | null }>((f, t) => db.from('routers').select('id, status, lifecycle_status, location_id').range(f, t)),
+    all<{ id: string; status: string | null; lifecycle_status: string; location_id: string | null; last_seen_at: string | null }>((f, t) => db.from('routers').select('id, status, lifecycle_status, location_id, last_seen_at').range(f, t)),
     all<{ status: string; updated_at: string | null; finished_at: string | null; router_id: string }>((f, t) => db.from('controller_jobs').select('status, updated_at, finished_at, router_id').in('status', ['queued', 'running', 'failed', 'dead']).range(f, t)),
     all((f, t) => db.from('locations').select('id, is_active').range(f, t)),
     db.from('controller_instances').select('last_heartbeat_at').order('last_heartbeat_at', { ascending: false }).limit(1),
@@ -29,7 +29,7 @@ export async function loadMetricInput(): Promise<MetricInput> {
       return { status: g.status, expires_at: g.expires_at, revoked_at: g.revoked_at, revoke_reason: g.revoke_reason, location_id: routerLocation.get(g.router_id) ?? null, phone: p?.phone_number ?? null };
     }),
     customers: customers as MetricInput['customers'],
-    routers: routers.map(({ status, lifecycle_status, location_id }) => ({ status, lifecycle_status, location_id })),
+    routers: routers.map(({ status, lifecycle_status, location_id, last_seen_at }) => ({ status, lifecycle_status, location_id, last_seen_at })),
     jobs: jobs.map((j) => ({ status: j.status, updated_at: j.updated_at, finished_at: j.finished_at, location_id: routerLocation.get(j.router_id) ?? null })),
     locations: locations as MetricInput['locations'],
     controllerLive: Boolean(last && isControllerLive(last)),

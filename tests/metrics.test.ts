@@ -93,10 +93,11 @@ describe('customers and network', () => {
   it('reports routers by health, jobs waiting and jobs that gave up', () => {
     const n = computeMetrics(base({
       routers: [
-        { status: 'online', lifecycle_status: 'active', location_id: A },
-        { status: 'offline', lifecycle_status: 'active', location_id: A },
-        { status: null, lifecycle_status: 'registered', location_id: A },
-        { status: 'offline', lifecycle_status: 'retired', location_id: A },
+        { status: 'online', lifecycle_status: 'active', location_id: A, last_seen_at: new Date(NOW.getTime() - 60_000).toISOString() },
+        { status: 'offline', lifecycle_status: 'active', location_id: A, last_seen_at: new Date(NOW.getTime() - 60_000).toISOString() },
+        { status: 'online', lifecycle_status: 'active', location_id: A, last_seen_at: '2026-11-17T09:00:00Z' }, // stale: not online
+        { status: null, lifecycle_status: 'registered', location_id: A, last_seen_at: null },
+        { status: 'offline', lifecycle_status: 'retired', location_id: A, last_seen_at: null },
       ],
       jobs: [
         { status: 'queued', updated_at: null, finished_at: null, location_id: A },
@@ -107,7 +108,7 @@ describe('customers and network', () => {
       locations: [{ id: A, is_active: true }, { id: B, is_active: false }],
       controllerLive: false,
     }), { period: 'today', locationId: null, now: NOW }).network;
-    expect(n).toEqual({ locationsOpen: 1, locationsTotal: 2, routersOnline: 1, routersOffline: 1, routersNotActive: 1, controllerLive: false, jobsWaiting: 2, jobsGaveUp: 1 });
+    expect(n).toEqual({ locationsOpen: 1, locationsTotal: 2, routersOnline: 1, routersOffline: 1, routersUnchecked: 1, routersNotActive: 1, controllerLive: false, jobsWaiting: 2, jobsGaveUp: 1 });
   });
 });
 

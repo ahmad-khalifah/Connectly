@@ -162,7 +162,7 @@ function Figures({ m, periodLabel, filtered }: { m: ReturnType<typeof computeMet
           <h2 id="network" className="text-lg font-bold text-ink">Network</h2>
           <StatGrid cols={2}>
             <Stat label="Routers online" value={network.routersOnline} tone={network.routersOnline > 0 ? 'ok' : undefined} how={how('Routers online and offline')}
-              note={network.routersNotActive ? `${network.routersNotActive} registered, not active yet` : undefined} />
+              note={[network.routersUnchecked && `${network.routersUnchecked} not checked in the last 5 minutes`, network.routersNotActive && `${network.routersNotActive} registered, not active yet`].filter(Boolean).join('. ') || undefined} />
             <Stat label="Routers offline" value={network.routersOffline} tone={network.routersOffline > 0 ? 'bad' : undefined} how={how('Routers online and offline')} />
             <Stat label="Controller" value={network.controllerLive ? 'Running' : 'Stopped'} tone={network.controllerLive ? 'ok' : 'bad'} how={how('Controller')} />
             <Stat label="Locations open" value={`${network.locationsOpen} of ${network.locationsTotal}`} note="Set by an admin" how={how('Locations open')} />

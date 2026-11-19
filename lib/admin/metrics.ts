@@ -1,3 +1,4 @@
+import { routerHealth } from '@/lib/admin/router-health';
 // Dashboard figures. Pure functions over rows the loader fetches, so every
 // number has one written definition (DEFINITIONS) and a unit test.
 // Days are Lagos days (UTC+1, no daylight saving).
@@ -57,7 +58,7 @@ export type PurchaseRow = {
 export type ExpenseRow = { amount_ngn: number | string; expense_date: string; location_id: string | null };
 export type GrantRow = { status: string; expires_at: string; revoked_at: string | null; revoke_reason: string | null; location_id: string | null; phone: string | null };
 export type CustomerRow = { created_at: string | null };
-export type RouterRow = { status: string | null; lifecycle_status: string; location_id: string | null };
+export type RouterRow = { status: string | null; lifecycle_status: string; location_id: string | null; last_seen_at: string | null };
 export type JobRow = { status: string; updated_at: string | null; finished_at: string | null; location_id: string | null };
 export type LocationRow = { id: string; is_active: boolean | null };
 
@@ -81,7 +82,7 @@ export type Metrics = {
     windows: { today: number; last7: number; month: number; all: number };
   };
   customers: { plansRunning: number; customersOnPlans: number; plansEnded: number; endedEarly: number; registered: number; newCustomers: number };
-  network: { locationsOpen: number; locationsTotal: number; routersOnline: number; routersOffline: number; routersNotActive: number; controllerLive: boolean; jobsWaiting: number; jobsGaveUp: number };
+  network: { locationsOpen: number; locationsTotal: number; routersOnline: number; routersOffline: number; routersUnchecked: number; routersNotActive: number; controllerLive: boolean; jobsWaiting: number; jobsGaveUp: number };
   /** Revenue per Lagos day (or month for all time), oldest first, zero-filled. */
   series: { key: string; label: string; revenue: number; payments: number }[];
   seriesUnit: 'day' | 'month';
@@ -184,8 +185,10 @@ export function computeMetrics(input: MetricInput, opts: { period: Period; locat
     network: {
       locationsOpen: locations.filter((l) => l.is_active !== false).length,
       locationsTotal: locations.length,
-      routersOnline: activeRouters.filter((r) => r.status === 'online').length,
-      routersOffline: activeRouters.filter((r) => r.status !== 'online').length,
+      // A reading older than 5 minutes is not current (the controller checks every minute).
+      routersOnline: activeRouters.filter((r) => routerHealth(r.status, r.last_seen_at, now.getTime()).label === 'Online').length,
+      routersOffline: activeRouters.filter((r) => !routerHealth(r.status, r.last_seen_at, now.getTime()).stale && r.status !== 'online').length,
+      routersUnchecked: activeRouters.filter((r) => routerHealth(r.status, r.last_seen_at, now.getTime()).stale).length,
       routersNotActive: routers.filter((r) => r.lifecycle_status !== 'active' && r.lifecycle_status !== 'retired').length,
       controllerLive: input.controllerLive,
       jobsWaiting: jobs.filter((j) => j.status === 'queued' || j.status === 'running' || j.status === 'failed').length,
@@ -212,7 +215,7 @@ export const DEFINITIONS: { name: string; how: string }[] = [
   { name: 'Registered customers', how: 'Every phone number that has completed a payment, all time and all locations.' },
   { name: 'New customers', how: 'Customers whose first payment was in the period. Not filtered by location.' },
   { name: 'Locations open', how: 'Locations marked active (selling plans), out of all locations. Set by an admin, not measured.' },
-  { name: 'Routers online and offline', how: 'Active routers by the controller\'s latest health check, run every minute.' },
+  { name: 'Routers online and offline', how: 'Active routers by the controller\'s health check, run every minute. A router not checked in the last 5 minutes is counted as not checked, not as online.' },
   { name: 'Controller', how: 'Running if its last heartbeat was within the last 2 minutes.' },
   { name: 'Jobs waiting', how: 'Router jobs queued, running, or failed and waiting to retry.' },
   { name: 'Jobs that gave up', how: 'Router jobs that ran out of retries in the period.' },
