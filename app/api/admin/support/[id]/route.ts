@@ -14,11 +14,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ message: 'Ticket not found.' }, { status: 404 });
 
-  const body = (await req.json().catch(() => null)) as { status?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { status?: unknown; note?: unknown } | null;
   const status = body?.status;
   if (typeof status !== 'string' || !(STATUSES as readonly string[]).includes(status)) {
     return NextResponse.json({ message: 'Status must be open, in progress or resolved.' }, { status: 400 });
   }
+  if (body?.note !== undefined && typeof body.note !== 'string') return NextResponse.json({ message: 'The note must be text.' }, { status: 400 });
+  const note = typeof body?.note === 'string' ? body.note.replace(/\s+/g, ' ').trim() : '';
+  if (note.length > 500) return NextResponse.json({ message: 'Keep the note under 500 characters.' }, { status: 400 });
 
   const { data, error } = await db
     .from('support_tickets')
@@ -32,6 +35,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const row = (data ?? [])[0] as { id: string; ticket_number: number; location_id: string | null } | undefined;
   if (!row) return NextResponse.json({ message: 'Ticket not found.' }, { status: 404 });
 
-  await logAdminAction(user, 'support.status_changed', `Ticket #${row.ticket_number} marked ${status.replace('_', ' ')}`, id, { locationId: row.location_id, metadata: { status } });
+  // The note lives in the activity log (the ticket row has no notes column), so
+  // every change keeps its own note and nothing earlier is overwritten.
+  await logAdminAction(user, 'support.status_changed', `Ticket #${row.ticket_number} marked ${status.replace('_', ' ')}${note ? `: ${note}` : ''}`, id, {
+    locationId: row.location_id,
+    metadata: note ? { status, note } : { status },
+  });
   return NextResponse.json({ success: true });
 }

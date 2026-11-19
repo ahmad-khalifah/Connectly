@@ -30,6 +30,18 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
   if (filter === 'resolved') q = q.eq('status', 'resolved');
   const { data: tickets, error } = await q;
 
+  // Notes added when a ticket changed status, newest first (kept in the activity log).
+  const ids = (tickets ?? []).map((t) => t.id);
+  const notes = new Map<string, { note: string; at: string }>();
+  if (ids.length) {
+    const { data: logs } = await db.from('activity_logs').select('entity_id, metadata, created_at')
+      .eq('event_type', 'support.status_changed').in('entity_id', ids).order('created_at', { ascending: false }).limit(1000);
+    for (const l of logs ?? []) {
+      const note = (l.metadata as { note?: unknown } | null)?.note;
+      if (typeof note === 'string' && l.entity_id && !notes.has(l.entity_id)) notes.set(l.entity_id, { note, at: l.created_at });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -73,8 +85,9 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
                 <td className={td}>
                   <Badge tone={st.tone}>{st.label}</Badge>
                   {t.assigned_to && <span className="mt-1 block text-[12px] text-subtle">{t.assigned_to}</span>}
+                  {notes.get(t.id) && <span className="mt-1 block max-w-[220px] text-[12px] text-muted">Note: {notes.get(t.id)!.note}</span>}
                 </td>
-                <td className={`${td} text-right`}><TicketStatus id={t.id} status={t.status ?? 'open'} /></td>
+                <td className={`${td} text-right`}><TicketStatus id={t.id} status={t.status ?? 'open'} number={t.ticket_number} /></td>
               </tr>
             );
           })}
