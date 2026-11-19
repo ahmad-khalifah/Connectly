@@ -26,6 +26,8 @@ const settling = (s: Status) => s.status === 'paid' && !s.access?.ready && !s.ac
 const POLL_MS = 4000;
 const MAX_POLLS = 45;
 const CHECK_ON = new Set([0, 2, 5, 10, 20, 35]);
+/** After this many polls (about 20 seconds) offer the way back, for customers who closed the checkout. */
+const OFFER_RETRY_AFTER = 5;
 
 const lagos = (iso: string) =>
   new Date(iso).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -33,6 +35,7 @@ const lagos = (iso: string) =>
 export default function PaymentStatus({ reference }: { reference: string }) {
   const [state, setState] = useState<Status | null>(null);
   const [gaveUp, setGaveUp] = useState(false);
+  const [slow, setSlow] = useState(false);
 
   useEffect(() => {
     let polls = 0;
@@ -51,6 +54,7 @@ export default function PaymentStatus({ reference }: { reference: string }) {
         if (!stopped) setState({ status: 'error' });
       }
       polls += 1;
+      if (polls === OFFER_RETRY_AFTER) setSlow(true);
       if (polls >= MAX_POLLS) {
         setGaveUp(true);
         return;
@@ -79,6 +83,13 @@ export default function PaymentStatus({ reference }: { reference: string }) {
           </Notice>
         )}
         {!gaveUp && <Spinner label="Checking with Korapay" className="mt-6" />}
+        {(slow || gaveUp) && state?.retryPath && (
+          <div className="mt-6 border-t border-line pt-5">
+            <p className="text-sm font-semibold text-ink">Closed the payment page without paying?</p>
+            <p className="mt-1 text-[13px] text-muted">Choose a plan again. If you did pay, stay here instead so you are not charged twice.</p>
+            <ButtonLink href={state.retryPath} variant="secondary" className="mt-3">Choose a plan again</ButtonLink>
+          </div>
+        )}
       </>
     );
   }
