@@ -91,8 +91,9 @@ test('bootstrap script: restricted group, API only from the controller, password
   assert.match(s, /\[\[:parse "\/ip service set www-ssl [^"]*available-from=10\.77\.0\.1\/32"\]\] \} on-error=\{ \[\[:parse "\/ip service set www-ssl [^"]*address=10\.77\.0\.1\/32"\]\]/, 'available-from on new RouterOS, address on old, both compiled at run time');
   assert.doesNotMatch(s, /\{ \/ip service set www-ssl/, 'no version-specific property is parsed with the whole script');
   const addAt = s.indexOf('comment="Connectly controller API" }');
-  const moveAt = s.indexOf('/ip firewall filter move [find comment="Connectly controller API"] destination=0');
+  const moveAt = s.indexOf('/ip firewall filter move [find comment="Connectly controller API"] destination=[:pick [/ip firewall filter find where !dynamic] 0]');
   assert.ok(addAt > 0 && moveAt > addAt, 'the API rule is moved above the default drop-from-WAN rule after it is added');
+  assert.doesNotMatch(s, /destination=0/, 'never position 0: that is the built-in FastTrack counter rule on a default firewall');
   // RouterOS 7 needs a CA to sign the HTTPS certificate (found on CHR 7.25.1).
   assert.match(s, /key-usage=key-cert-sign,crl-sign; \/certificate sign connectly-ca/);
   assert.match(s, /\/certificate sign connectly-api ca=connectly-ca/);
