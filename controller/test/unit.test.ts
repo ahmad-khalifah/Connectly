@@ -88,7 +88,8 @@ test('bootstrap script: restricted group, API only from the controller, password
   const s = bootstrapScript({ identifier: 'cx-garki-01' } as RouterRow, pw, '10.77.0.1');
   assert.match(s, /policy="read,write,api,rest-api,test"/);
   assert.doesNotMatch(s, /policy="[^"]*(policy|sensitive|password|sniff|romon)/);
-  assert.match(s, /\/ip service set www-ssl [^}]*available-from=10\.77\.0\.1\/32 \} on-error=\{ \/ip service set www-ssl [^}]*address=10\.77\.0\.1\/32/, 'available-from on new RouterOS, address on old');
+  assert.match(s, /\[\[:parse "\/ip service set www-ssl [^"]*available-from=10\.77\.0\.1\/32"\]\] \} on-error=\{ \[\[:parse "\/ip service set www-ssl [^"]*address=10\.77\.0\.1\/32"\]\]/, 'available-from on new RouterOS, address on old, both compiled at run time');
+  assert.doesNotMatch(s, /\{ \/ip service set www-ssl/, 'no version-specific property is parsed with the whole script');
   const addAt = s.indexOf('comment="Connectly controller API" }');
   const moveAt = s.indexOf('/ip firewall filter move [find comment="Connectly controller API"] destination=0');
   assert.ok(addAt > 0 && moveAt > addAt, 'the API rule is moved above the default drop-from-WAN rule after it is added');
