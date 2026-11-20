@@ -48,6 +48,8 @@ export const TAG = 'connectly-hotspot';
 export const NAME = 'connectly';
 export const POOL = 'connectly-hotspot';
 const WG_TAG = 'connectly';
+/** Private ranges customers may not reach (RFC 1918). */
+export const PRIVATE_RANGES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] as const;
 
 const ipToInt = (ip: string) => ip.split('.').reduce((n, o) => (n << 8) + Number(o), 0) >>> 0;
 const intToIp = (n: number) => [24, 16, 8, 0].map((s) => (n >>> s) & 255).join('.');
@@ -219,6 +221,19 @@ export async function applyHotspot(c: RouterClient, plan: HotspotPlan): Promise<
     const label = `FastTrack exemption (${dir})`;
     await ensure(c, r, label, '/ip/firewall/filter', { comment },
       { chain: 'forward', action: 'accept', 'connection-state': 'established,related', [field]: plan.network });
+    await placeAboveFasttrack(c, r, label, comment);
+  }
+
+  // Customers reach the internet only: never the site's private networks (the
+  // management LAN with the router's admin pages, staff computers and the
+  // controller; the upstream router, e.g. Starlink's 192.168.1.0/24). Traffic
+  // within the customer network is bridged and never passes this chain.
+  // Found reviewing the physical L009, 20 Nov 2026.
+  for (const [i, range] of PRIVATE_RANGES.entries()) {
+    const comment = `${TAG}-no-private-${i + 1}`;
+    const label = `customer isolation (${range})`;
+    await ensure(c, r, label, '/ip/firewall/filter', { comment },
+      { chain: 'forward', action: 'drop', 'src-address': plan.network, 'dst-address': range });
     await placeAboveFasttrack(c, r, label, comment);
   }
 

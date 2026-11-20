@@ -401,7 +401,15 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.ok(fw.indexOf('connectly-hotspot-no-fasttrack-in') < fw.indexOf('defconf: fasttrack'), 'customer traffic kept out of FastTrack (in)');
     assert.equal(rule('connectly-hotspot-no-fasttrack-out')['src-address'], '10.10.0.0/22');
     assert.equal(rule('connectly-hotspot-no-fasttrack-in')['dst-address'], '10.10.0.0/22');
-    assert.equal(fw.length, 10);
+    for (const [i, range] of ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].entries()) {
+      const c = `connectly-hotspot-no-private-${i + 1}`;
+      assert.equal(rule(c).action, 'drop');
+      assert.equal(rule(c).chain, 'forward');
+      assert.equal(rule(c)['src-address'], '10.10.0.0/22');
+      assert.equal(rule(c)['dst-address'], range, 'customers cannot reach private networks');
+      assert.ok(fw.indexOf(c) < fw.indexOf('defconf: fasttrack'));
+    }
+    assert.equal(fw.length, 13);
     assert.deepEqual(m('/ip/hotspot/walled-garden').map((w) => w['dst-host']).sort(), ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
     assert.match(m('/file')[0]!.contents!, /url=https:\/\/getconnectly\.net\/portal\?router=cx-hs-01/);
     let s = (await t.admin.query('select version, applied_version, applied_at from router_hotspot_settings where router_id = $1', [r.id])).rows[0];
