@@ -7,7 +7,7 @@ type RawGrant = { status: string; expires_at: string; revoked_at: string | null;
 
 /** Fetches what computeMetrics needs. Throws on a database error so the page says so instead of showing zeros. */
 export async function loadMetricInput(): Promise<MetricInput> {
-  const [purchases, expenses, rawGrants, customers, routers, jobs, locations, heartbeat] = await Promise.all([
+  const [purchases, expenses, rawGrants, customers, routers, jobs, locations, heartbeat, sessions] = await Promise.all([
     all((f, t) => db.from('purchases').select('status, amount_paid, amount_kobo, gateway_fee_ngn, paid_at, created_at, expires_at, location_id, phone_number').in('status', ['paid', 'failed']).order('created_at').range(f, t)),
     all((f, t) => db.from('expenses').select('amount_ngn, expense_date, location_id').order('expense_date').range(f, t)),
     all<RawGrant>((f, t) => db.from('network_authorizations').select('status, expires_at, revoked_at, revoke_reason, router_id, purchases(phone_number)').order('created_at').range(f, t)),
@@ -16,6 +16,7 @@ export async function loadMetricInput(): Promise<MetricInput> {
     all<{ status: string; updated_at: string | null; finished_at: string | null; router_id: string }>((f, t) => db.from('controller_jobs').select('status, updated_at, finished_at, router_id').in('status', ['queued', 'running', 'failed', 'dead']).range(f, t)),
     all((f, t) => db.from('locations').select('id, is_active').range(f, t)),
     db.from('controller_instances').select('last_heartbeat_at').order('last_heartbeat_at', { ascending: false }).limit(1),
+    all<{ location_id: string | null; last_seen_at: string | null }>((f, t) => db.from('network_sessions').select('location_id, last_seen_at').eq('status', 'active').range(f, t)),
   ]);
 
   const routerLocation = new Map(routers.map((r) => [r.id, r.location_id]));
@@ -33,5 +34,6 @@ export async function loadMetricInput(): Promise<MetricInput> {
     jobs: jobs.map((j) => ({ status: j.status, updated_at: j.updated_at, finished_at: j.finished_at, location_id: routerLocation.get(j.router_id) ?? null })),
     locations: locations as MetricInput['locations'],
     controllerLive: Boolean(last && isControllerLive(last)),
+    sessions,
   };
 }

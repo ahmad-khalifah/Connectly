@@ -32,7 +32,7 @@ export class RouterError extends Error {
 }
 
 export type HotspotUser = { id: string; name: string; comment?: string; profile?: string; limitUptime?: string };
-export type ActiveSession = { id: string; user: string; address?: string; macAddress?: string; uptime?: string };
+export type ActiveSession = { id: string; user: string; address?: string; macAddress?: string; uptime?: string; bytesIn?: number; bytesOut?: number };
 export type Resource = { version: string; boardName: string; uptimeSeconds: number; cpuLoad: number; memoryUsedPct: number };
 
 export interface RouterClient {
@@ -212,7 +212,8 @@ export class RestRouterClient implements RouterClient {
 
   async listActive(user?: string): Promise<ActiveSession[]> {
     const rows = await this.request<Record<string, string>[]>('GET', `/ip/hotspot/active${user ? `?user=${encodeURIComponent(user)}` : ''}`);
-    return rows.map((r) => ({ id: r['.id']!, user: r.user!, address: r.address, macAddress: r['mac-address'], uptime: r.uptime }));
+    return rows.map((r) => ({ id: r['.id']!, user: r.user!, address: r.address, macAddress: r['mac-address'], uptime: r.uptime,
+      bytesIn: r['bytes-in'] ? Number(r['bytes-in']) : undefined, bytesOut: r['bytes-out'] ? Number(r['bytes-out']) : undefined }));
   }
 
   async list(path: string, query: Record<string, string> = {}): Promise<Record<string, string>[]> {

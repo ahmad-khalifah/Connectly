@@ -1,7 +1,8 @@
 // Router health polling and reconciliation.
 //
 // Health: every active router is asked for its resource figures; three missed
-// polls in a row mark it offline (and log it once).
+// polls in a row mark it offline (and log it once). Each successful poll also
+// records the router's active hotspot sessions in network_sessions.
 //
 // Reconciliation (at start-up and every 15 minutes): compares the hotspot
 // users this controller created on a router (comment "connectly:<grant id>")
@@ -10,9 +11,9 @@
 // hour per grant). This repairs any drift, including work missed while the
 // controller was down.
 
-import type { Db, RouterRow } from './db.ts';
+import type { Db, RouterRow, SessionSnapshot } from './db.ts';
 import { clientFor, type JobContext } from './jobs.ts';
-import { RouterError } from './routeros.ts';
+import { parseRouterOsDuration, RouterError, type RouterClient } from './routeros.ts';
 import { KeyError } from './keys.ts';
 
 export const OFFLINE_AFTER_MISSES = 3;
@@ -26,11 +27,13 @@ export class HealthMonitor {
 
   async pollRouter(router: RouterRow): Promise<'online' | 'missed' | 'offline'> {
     try {
-      const res = await clientFor(router, this.ctx).resource();
+      const client = clientFor(router, this.ctx);
+      const res = await client.resource();
       const wasOffline = (this.misses.get(router.id) ?? 0) >= OFFLINE_AFTER_MISSES || router.status === 'offline';
       this.misses.set(router.id, 0);
       await this.ctx.db.recordHealth(router.id, { online: true, version: res.version, uptimeSeconds: res.uptimeSeconds, cpu: res.cpuLoad, memory: res.memoryUsedPct });
       if (wasOffline) await this.ctx.db.logActivity('router.online', 'info', router.id, router.location_id, `Router ${router.identifier} is reachable again`);
+      await this.syncSessions(router, client);
       return 'online';
     } catch (e) {
       if (!(e instanceof RouterError || e instanceof KeyError)) throw e;
@@ -42,6 +45,21 @@ export class HealthMonitor {
         return 'offline';
       }
       return n > OFFLINE_AFTER_MISSES ? 'offline' : 'missed';
+    }
+  }
+
+  /** Records the router's active hotspot sessions. Best effort: a failure is logged and never marks the router offline. */
+  async syncSessions(router: RouterRow, client: RouterClient): Promise<void> {
+    try {
+      const sessions: SessionSnapshot[] = [];
+      for (const a of await client.listActive()) {
+        if (!a.address || !a.macAddress) continue;
+        sessions.push({ routerSessionId: a.id, user: a.user, mac: a.macAddress.toUpperCase(), ip: a.address,
+          uptimeSeconds: parseRouterOsDuration(a.uptime), bytesIn: a.bytesIn ?? 0, bytesOut: a.bytesOut ?? 0 });
+      }
+      await this.ctx.db.syncSessions(router.id, router.location_id, sessions);
+    } catch (e) {
+      this.ctx.log.warn('sessions.sync_failed', { router_id: router.id, error: e instanceof Error ? e.message : String(e) });
     }
   }
 

@@ -62,6 +62,8 @@ export type RouterRow = { status: string | null; lifecycle_status: string; locat
 export type JobRow = { status: string; updated_at: string | null; finished_at: string | null; location_id: string | null };
 export type LocationRow = { id: string; is_active: boolean | null };
 
+export type SessionRow = { location_id: string | null; last_seen_at: string | null };
+
 export type MetricInput = {
   purchases: PurchaseRow[];
   expenses: ExpenseRow[];
@@ -71,6 +73,8 @@ export type MetricInput = {
   jobs: JobRow[];
   locations: LocationRow[];
   controllerLive: boolean;
+  /** Router sessions the controller recorded as active (network_sessions). */
+  sessions?: SessionRow[];
 };
 
 // ---------------------------------------------------------------- output
@@ -82,7 +86,7 @@ export type Metrics = {
     windows: { today: number; last7: number; month: number; all: number };
   };
   customers: { plansRunning: number; customersOnPlans: number; plansEnded: number; endedEarly: number; registered: number; newCustomers: number };
-  network: { locationsOpen: number; locationsTotal: number; routersOnline: number; routersOffline: number; routersUnchecked: number; routersNotActive: number; controllerLive: boolean; jobsWaiting: number; jobsGaveUp: number };
+  network: { locationsOpen: number; locationsTotal: number; routersOnline: number; routersOffline: number; routersUnchecked: number; routersNotActive: number; controllerLive: boolean; jobsWaiting: number; jobsGaveUp: number; devicesOnline: number };
   /** Revenue per Lagos day (or month for all time), oldest first, zero-filled. */
   series: { key: string; label: string; revenue: number; payments: number }[];
   seriesUnit: 'day' | 'month';
@@ -193,6 +197,8 @@ export function computeMetrics(input: MetricInput, opts: { period: Period; locat
       controllerLive: input.controllerLive,
       jobsWaiting: jobs.filter((j) => j.status === 'queued' || j.status === 'running' || j.status === 'failed').length,
       jobsGaveUp: jobs.filter((j) => j.status === 'dead' && inRange(j.finished_at ?? j.updated_at, from, to)).length,
+      // Sessions the controller saw on a router in the last 5 minutes (it records them every minute).
+      devicesOnline: atLoc(input.sessions ?? []).filter((x) => x.last_seen_at && now.getTime() - Date.parse(x.last_seen_at) <= 5 * 60_000).length,
     },
     series,
     seriesUnit: unit,
@@ -219,7 +225,8 @@ export const DEFINITIONS: { name: string; how: string }[] = [
   { name: 'Controller', how: 'Running if its last heartbeat was within the last 2 minutes.' },
   { name: 'Jobs waiting', how: 'Router jobs queued, running, or failed and waiting to retry.' },
   { name: 'Jobs that gave up', how: 'Router jobs that ran out of retries in the period.' },
-  { name: 'Live sessions and data use', how: 'Not yet measured: the controller does not record router sessions or data use yet.' },
+  { name: 'Devices online now', how: 'Devices logged in to a router\'s hotspot, as the controller read them from the router in the last 5 minutes (it reads every minute). Shows 0 while the controller is stopped.' },
+  { name: 'Data use', how: 'Not yet measured: the controller records each session\'s bytes, but not per period yet.' },
 ];
 
 // ---------------------------------------------------------------- breakdowns

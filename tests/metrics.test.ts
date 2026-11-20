@@ -108,7 +108,7 @@ describe('customers and network', () => {
       locations: [{ id: A, is_active: true }, { id: B, is_active: false }],
       controllerLive: false,
     }), { period: 'today', locationId: null, now: NOW }).network;
-    expect(n).toEqual({ locationsOpen: 1, locationsTotal: 2, routersOnline: 1, routersOffline: 1, routersUnchecked: 1, routersNotActive: 1, controllerLive: false, jobsWaiting: 2, jobsGaveUp: 1 });
+    expect(n).toEqual({ locationsOpen: 1, locationsTotal: 2, routersOnline: 1, routersOffline: 1, routersUnchecked: 1, routersNotActive: 1, controllerLive: false, jobsWaiting: 2, jobsGaveUp: 1, devicesOnline: 0 });
   });
 });
 
@@ -127,5 +127,18 @@ describe('revenue breakdown', () => {
     ]);
     expect(r.byPlan.map((x) => [x.id, x.payments, x.revenue])).toEqual([['p2', 1, 500], ['p1', 2, 400]]);
     expect(r.generalExpenses).toBe(40);
+  });
+});
+
+describe('devices online now', () => {
+  it('counts sessions the controller saw in the last 5 minutes, per location', async () => {
+    const { computeMetrics } = await import('@/lib/admin/metrics');
+    const now = new Date('2026-11-20T08:00:00Z');
+    const ago = (m: number) => new Date(now.getTime() - m * 60_000).toISOString();
+    const input = { purchases: [], expenses: [], grants: [], customers: [], routers: [], jobs: [], locations: [], controllerLive: true,
+      sessions: [{ location_id: 'A', last_seen_at: ago(1) }, { location_id: 'A', last_seen_at: ago(4) }, { location_id: 'B', last_seen_at: ago(1) }, { location_id: 'A', last_seen_at: ago(20) }] };
+    expect(computeMetrics(input, { period: 'today', now, locationId: null }).network.devicesOnline).toBe(3);
+    expect(computeMetrics(input, { period: 'today', now, locationId: 'A' }).network.devicesOnline).toBe(2);
+    expect(computeMetrics({ ...input, sessions: undefined }, { period: 'today', now, locationId: null }).network.devicesOnline).toBe(0);
   });
 });

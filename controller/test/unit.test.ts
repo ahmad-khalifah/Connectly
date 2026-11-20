@@ -130,6 +130,11 @@ test('hotspot plan: pool skips network, gateway and broadcast; walled garden mer
   assert.equal(p.equipmentRange, '10.10.0.2-10.10.0.11', '10 fixed addresses kept for access points and switches');
   assert.deepEqual(p.walledGarden, ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
   assert.match(p.loginHtml, /url=https:\/\/getconnectly\.net\/portal\?router=cx-garki-01&mac=\$\(mac-esc\)&ip=\$\(ip\)&link=\$\(link-login-only-esc\)/);
+  // A Vercel shareable link already has a query string: the router's parameters follow with &.
+  const shared = planHotspot('cx-1', { lan_interface: 'ether2', gateway_cidr: '10.10.0.1/22', dns_name: 'wifi.getconnectly.net', extra_walled_garden: [], version: 1 },
+    { portal_url: 'https://staging.example.vercel.app/portal?_vercel_share=abc', walled_garden_hosts: [] });
+  assert.match(shared.loginHtml, /portal\?_vercel_share=abc&router=cx-1&mac=\$\(mac-esc\)/);
+  assert.ok(shared.walledGarden.includes('staging.example.vercel.app'));
   const q = planHotspot('r', { lan_interface: 'bridge1', gateway_cidr: '192.168.50.254/24', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
     { portal_url: 'https://x.example.com/p', walled_garden_hosts: [] });
   assert.equal(q.poolRange, '192.168.50.1-192.168.50.243', 'gateway at the top: pool below it');

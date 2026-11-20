@@ -262,6 +262,40 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.deepEqual([row.status, row.is_online, row.cpu_usage_pct], ['online', true, 3]);
   });
 
+  test('sessions: each health poll records the router active sessions and ends the ones that are gone', async () => {
+    const r = await register('cx-sess-01', 'active');
+    const router = (await db.getRouter(r.id))!;
+    const h = new HealthMonitor(ctx);
+    r.fake.active.set('*A1', { id: '*A1', user: 'NOGRANT1', address: '10.10.0.50', macAddress: 'aa:bb:cc:00:00:01', uptime: '1m30s', bytesIn: 1000, bytesOut: 5000 });
+    r.fake.active.set('*A2', { id: '*A2', user: 'NOGRANT2', address: '10.10.0.51', macAddress: 'AA:BB:CC:00:00:02', uptime: '10s' });
+    assert.equal(await h.pollRouter(router), 'online');
+    const rows = async () => (await t.admin.query(
+      `select router_session_id, mac_address, host(ip_address) ip, uptime_seconds, bytes_in, bytes_out, status, session_end is not null ended
+         from network_sessions where router_id = $1 order by router_session_id, session_start`, [r.id])).rows;
+    let x = await rows();
+    assert.equal(x.length, 2);
+    assert.deepEqual([x[0].mac_address, x[0].ip, Number(x[0].uptime_seconds), Number(x[0].bytes_in), Number(x[0].bytes_out), x[0].status], ['AA:BB:CC:00:00:01', '10.10.0.50', 90, 1000, 5000, 'active']);
+
+    // Next poll: *A1 still there with more traffic, *A2 gone.
+    r.fake.active.set('*A1', { id: '*A1', user: 'NOGRANT1', address: '10.10.0.50', macAddress: 'AA:BB:CC:00:00:01', uptime: '2m30s', bytesIn: 2000, bytesOut: 9000 });
+    r.fake.active.delete('*A2');
+    await h.pollRouter(router);
+    x = await rows();
+    assert.deepEqual(x.map((y) => [y.router_session_id, y.status, y.ended]), [['*A1', 'active', false], ['*A2', 'terminated', true]]);
+    assert.equal(Number(x[0].bytes_out), 9000, 'same session refreshed, not duplicated');
+
+    // After a router restart the id *A1 is reused by another device: a new session, the old one ends.
+    r.fake.active.set('*A1', { id: '*A1', user: 'NOGRANT3', address: '10.10.0.60', macAddress: 'AA:BB:CC:00:00:03', uptime: '5s' });
+    await h.pollRouter(router);
+    x = (await rows()).filter((y) => y.router_session_id === '*A1');
+    assert.deepEqual(x.map((y) => [y.mac_address, y.status]).sort(), [['AA:BB:CC:00:00:01', 'terminated'], ['AA:BB:CC:00:00:03', 'active']]);
+
+    // A failure to record sessions never marks the router offline.
+    const brokenDb = Object.create(db);
+    brokenDb.syncSessions = async () => { throw new Error('db down'); };
+    assert.equal(await new HealthMonitor({ ...ctx, db: brokenDb }).pollRouter(router), 'online');
+  });
+
   test('bootstrap: serves the credential only to the router\'s own tunnel address, and never logs it', async () => {
     const pw = crypto.randomBytes(24).toString('base64url');
     const r = await addRouter(t.admin, { identifier: 'cx-boot-01', publicPem: keys.publicPem, keyId: keys.keyId, password: pw });
@@ -336,10 +370,14 @@ describe('controller against a local copy of the database', { skip }, () => {
 
   test('hotspot: configured on a registered router, idempotent, follows settings changes', async () => {
     const r = await register('cx-hs-01');
-    // Like a physical MikroTik's default configuration: the input chain ends by dropping anything not from LAN.
+    // Like a physical MikroTik's default configuration (the L009 export of 20 Nov 2026): WAN and LAN
+    // interface lists, an input chain that ends by dropping anything not from LAN, and FastTrack in forward.
+    r.fake.menus.set('/interface/list', [{ '.id': '*L1', name: 'WAN' }, { '.id': '*L2', name: 'LAN' }]);
     r.fake.menus.set('/ip/firewall/filter', [
       { '.id': '*1', chain: 'input', action: 'accept', 'connection-state': 'established,related,untracked', comment: 'defconf: accept established,related,untracked' },
       { '.id': '*2', chain: 'input', action: 'drop', 'in-interface-list': '!LAN', comment: 'defconf: drop all not coming from LAN' },
+      { '.id': '*3', chain: 'forward', action: 'fasttrack-connection', 'connection-state': 'established,related', comment: 'defconf: fasttrack' },
+      { '.id': '*4', chain: 'forward', action: 'accept', 'connection-state': 'established,related,untracked', comment: 'defconf: accept established,related, untracked' },
     ]);
     await t.admin.query(`insert into router_hotspot_settings (router_id, extra_walled_garden) values ($1, array['*.paystack.co'])`, [r.id]);
     const id1 = await enqueue('router.configure_hotspot', r.id);
@@ -354,8 +392,16 @@ describe('controller against a local copy of the database', { skip }, () => {
     const fw = m('/ip/firewall/filter').map((x) => x.comment);
     assert.deepEqual(fw.slice(0, 2).sort(), ['connectly-hotspot-dns-allow-tcp', 'connectly-hotspot-dns-allow-udp'], 'customer DNS allowed above the default drop rule');
     assert.ok(fw.indexOf('defconf: drop all not coming from LAN') > 1);
-    assert.ok(fw.includes('connectly-hotspot-dns-udp') && fw.includes('connectly-hotspot-dns-tcp'), 'DNS refused from every other port (udp + tcp)');
-    assert.equal(fw.length, 6);
+    const rule = (c: string) => m('/ip/firewall/filter').find((x) => x.comment === c)!;
+    for (const proto of ['udp', 'tcp']) {
+      assert.equal(rule(`connectly-hotspot-dns-${proto}`)['in-interface-list'], 'WAN', 'DNS refused from the internet side only');
+      assert.equal(rule(`connectly-hotspot-dns-${proto}`)['in-interface'], undefined, 'management network keeps DNS');
+    }
+    assert.ok(fw.indexOf('connectly-hotspot-no-fasttrack-out') < fw.indexOf('defconf: fasttrack'), 'customer traffic kept out of FastTrack (out)');
+    assert.ok(fw.indexOf('connectly-hotspot-no-fasttrack-in') < fw.indexOf('defconf: fasttrack'), 'customer traffic kept out of FastTrack (in)');
+    assert.equal(rule('connectly-hotspot-no-fasttrack-out')['src-address'], '10.10.0.0/22');
+    assert.equal(rule('connectly-hotspot-no-fasttrack-in')['dst-address'], '10.10.0.0/22');
+    assert.equal(fw.length, 10);
     assert.deepEqual(m('/ip/hotspot/walled-garden').map((w) => w['dst-host']).sort(), ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
     assert.match(m('/file')[0]!.contents!, /url=https:\/\/getconnectly\.net\/portal\?router=cx-hs-01/);
     let s = (await t.admin.query('select version, applied_version, applied_at from router_hotspot_settings where router_id = $1', [r.id])).rows[0];
@@ -366,6 +412,17 @@ describe('controller against a local copy of the database', { skip }, () => {
     await ctl.runOnce();
     const res2 = (await job(id2)).result;
     assert.deepEqual([res2.created.length, res2.updated.length, res2.removed.length], [0, 0, 0], 'second apply changes nothing');
+
+    // A router configured by the earlier version (guard on "every port except the customer port") is corrected.
+    const old = m('/ip/firewall/filter').find((x) => x.comment === 'connectly-hotspot-dns-udp')!;
+    delete old['in-interface-list'];
+    old['in-interface'] = '!ether2';
+    const idOld = await enqueue('router.configure_hotspot', r.id);
+    await ctl.runOnce();
+    assert.ok((await job(idOld)).result.removed.includes('DNS guard (udp), earlier form'));
+    const fixed = m('/ip/firewall/filter').filter((x) => x.comment === 'connectly-hotspot-dns-udp');
+    assert.equal(fixed.length, 1);
+    assert.deepEqual([fixed[0]!['in-interface-list'], fixed[0]!['in-interface']], ['WAN', undefined]);
 
     await t.admin.query(`update router_hotspot_settings set dns_name = 'hotspot.example.com', extra_walled_garden = '{}' where router_id = $1`, [r.id]);
     s = (await t.admin.query('select version, applied_version from router_hotspot_settings where router_id = $1', [r.id])).rows[0];

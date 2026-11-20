@@ -13,8 +13,12 @@ export function parsePortalSettings(raw: unknown): { ok: true; value: PortalSett
 
   let url: URL | null = null;
   try { url = new URL(String(b.portal_url ?? '').trim()); } catch { /* reported below */ }
-  if (!url || url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
-    errors.portal_url = 'Use the full https address of the portal page, e.g. https://getconnectly.net/portal, with nothing after the path.';
+  // The only query string allowed is a Vercel shareable link's own token
+  // (_vercel_share), so phones on a protected staging preview can open the
+  // portal on a test day. The router adds its own parameters after it.
+  const shareOnly = url ? [...url.searchParams.keys()].every((k) => k === '_vercel_share') : false;
+  if (!url || url.protocol !== 'https:' || url.username || url.password || url.hash || (url.search && !shareOnly)) {
+    errors.portal_url = 'Use the full https address of the portal page, e.g. https://getconnectly.net/portal, with nothing after the path (a Vercel shareable link\'s _vercel_share is the only exception).';
   }
 
   const rawHosts = Array.isArray(b.walled_garden_hosts) ? b.walled_garden_hosts : String(b.walled_garden_hosts ?? '').split(/[\s,]+/);
@@ -25,7 +29,7 @@ export function parsePortalSettings(raw: unknown): { ok: true; value: PortalSett
   else if (hosts.some((h) => h === '*' || /^\*\.[a-z]{2,63}$/.test(h))) errors.walled_garden_hosts = 'A whole top-level domain would let customers browse without paying.';
 
   if (Object.keys(errors).length || !url) return { ok: false, errors };
-  return { ok: true, value: { portal_url: `${url.origin}${url.pathname}`, walled_garden_hosts: hosts } };
+  return { ok: true, value: { portal_url: `${url.origin}${url.pathname}${url.search}`, walled_garden_hosts: hosts } };
 }
 
 /**

@@ -168,8 +168,9 @@ function Figures({ m, periodLabel, filtered }: { m: ReturnType<typeof computeMet
             <Stat label="Locations open" value={`${network.locationsOpen} of ${network.locationsTotal}`} note="Set by an admin" how={how('Locations open')} />
             <Stat label="Jobs waiting" value={network.jobsWaiting} how={how('Jobs waiting')} />
             <Stat label={`Jobs that gave up, ${periodLabel}`} value={network.jobsGaveUp} tone={network.jobsGaveUp > 0 ? 'bad' : undefined} how={how('Jobs that gave up')} />
-            <Stat label="Live sessions" unmeasured how={how('Live sessions and data use')} />
-            <Stat label="Data use" unmeasured how={how('Live sessions and data use')} />
+            <Stat label="Devices online now" value={network.devicesOnline} how={how('Devices online now')}
+              note={network.controllerLive ? undefined : 'Controller stopped: not current'} />
+            <Stat label="Data use" unmeasured how={how('Data use')} />
           </StatGrid>
         </section>
       </div>

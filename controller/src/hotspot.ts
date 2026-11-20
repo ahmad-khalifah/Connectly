@@ -13,6 +13,7 @@
 //   profile      hotspot address and DNS name         /ip/hotspot/profile name connectly
 //   server       the hotspot on the customer port     /ip/hotspot        name    connectly
 //   NAT          customers out to the internet        /ip/firewall/nat   comment connectly-hotspot
+//   no FastTrack customers' traffic kept out of FastTrack, so speed limits hold
 //   walled garden  hosts reachable before paying      /ip/hotspot/walled-garden comment connectly
 //   login page   sends customers to the payment page  hotspot/login.html
 //
@@ -83,7 +84,10 @@ export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: Por
   const hosts = [...new Set([portal.hostname, ...p.walled_garden_hosts, ...s.extra_walled_garden].map((h) => h.toLowerCase()))].sort();
 
   // MikroTik fills in $(mac), $(ip) and $(link-login-only-esc) for each customer.
-  const target = `${p.portal_url}?router=${encodeURIComponent(routerIdentifier)}&mac=$(mac-esc)&ip=$(ip)&link=$(link-login-only-esc)`;
+  // A portal address may already carry a query string (a Vercel shareable link
+  // on test day), so the router's own parameters are appended with & then.
+  const sep = p.portal_url.includes('?') ? '&' : '?';
+  const target = `${p.portal_url}${sep}router=${encodeURIComponent(routerIdentifier)}&mac=$(mac-esc)&ip=$(ip)&link=$(link-login-only-esc)`;
   const loginHtml = [
     '<!doctype html>',
     '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
@@ -118,6 +122,16 @@ async function moveToTop(c: RouterClient, r: ApplyReport, label: string, comment
   if (rules.slice(0, pos).every((x) => (x.comment ?? '').startsWith(`${TAG}-dns-allow-`))) return;
   await c.command('/ip/firewall/filter/move', { numbers: ours['.id']!, destination: first['.id']! });
   r.updated.push(`${label}: moved above the existing firewall rules`);
+}
+
+/** Puts our forward rule above the first FastTrack rule, if the router has one. */
+async function placeAboveFasttrack(c: RouterClient, r: ApplyReport, label: string, comment: string) {
+  const rules = (await c.list('/ip/firewall/filter')).filter((x) => x.dynamic !== 'true');
+  const ft = rules.find((x) => x.action === 'fasttrack-connection');
+  const ours = rules.find((x) => x.comment === comment);
+  if (!ft || !ours || rules.indexOf(ours) < rules.indexOf(ft)) return;
+  await c.command('/ip/firewall/filter/move', { numbers: ours['.id']!, destination: ft['.id']! });
+  r.updated.push(`${label}: moved above FastTrack`);
 }
 
 /** Makes one menu entry (found by `key`) have `fields`, creating it if missing. */
@@ -164,9 +178,25 @@ export async function applyHotspot(c: RouterClient, plan: HotspotPlan): Promise<
   } else {
     r.unchanged.push('DNS for customers');
   }
+  // The guard refuses DNS from the internet side. On a router with the default
+  // WAN interface list it matches that list only, so the management network
+  // (staff, the controller, the APs' own config pages) keeps using the router
+  // for DNS. Found reviewing the physical L009, 19 Nov 2026: the earlier form
+  // ("every port except the customer port") would have cut DNS for management.
+  // A router with no WAN list (the CHR lab) keeps the earlier form.
+  const hasWanList = (await c.list('/interface/list', { name: 'WAN' })).length > 0;
+  const guard: Record<string, string> = hasWanList ? { 'in-interface-list': 'WAN' } : { 'in-interface': `!${plan.lanInterface}` };
   for (const proto of ['udp', 'tcp']) {
-    await ensure(c, r, `DNS guard (${proto})`, '/ip/firewall/filter', { comment: `${TAG}-dns-${proto}` },
-      { chain: 'input', protocol: proto, 'dst-port': '53', 'in-interface': `!${plan.lanInterface}`, action: 'drop' });
+    const comment = `${TAG}-dns-${proto}`;
+    // A guard written in the other form is replaced, not patched: RouterOS keeps a matcher that is not mentioned.
+    for (const old of await c.list('/ip/firewall/filter', { comment })) {
+      if (hasWanList ? old['in-interface'] : old['in-interface-list']) {
+        await c.remove('/ip/firewall/filter', old['.id']!);
+        r.removed.push(`DNS guard (${proto}), earlier form`);
+      }
+    }
+    await ensure(c, r, `DNS guard (${proto})`, '/ip/firewall/filter', { comment },
+      { chain: 'input', protocol: proto, 'dst-port': '53', ...guard, action: 'drop' });
   }
   // Physical MikroTik routers ship with a firewall that ends "drop everything not
   // coming from LAN". The customer port is not on that list, so customers'
@@ -180,6 +210,17 @@ export async function applyHotspot(c: RouterClient, plan: HotspotPlan): Promise<
   await ensure(c, r, 'hotspot profile', '/ip/hotspot/profile', { name: NAME }, { 'hotspot-address': plan.gateway, 'dns-name': plan.dnsName, 'login-by': 'http-chap,http-pap' });
   await ensure(c, r, 'hotspot server', '/ip/hotspot', { name: NAME }, { interface: plan.lanInterface, 'address-pool': POOL, profile: NAME, disabled: 'false' });
   await ensure(c, r, 'customer NAT', '/ip/firewall/nat', { comment: TAG }, { chain: 'srcnat', 'src-address': plan.network, action: 'masquerade' });
+
+  // FastTracked traffic skips queues, so a plan's speed limit (the hotspot's
+  // dynamic queue) would not hold. Customers' established traffic is accepted
+  // just above the default FastTrack rule instead, so it never gets fast-tracked.
+  for (const [dir, field] of [['out', 'src-address'], ['in', 'dst-address']] as const) {
+    const comment = `${TAG}-no-fasttrack-${dir}`;
+    const label = `FastTrack exemption (${dir})`;
+    await ensure(c, r, label, '/ip/firewall/filter', { comment },
+      { chain: 'forward', action: 'accept', 'connection-state': 'established,related', [field]: plan.network });
+    await placeAboveFasttrack(c, r, label, comment);
+  }
 
   // Walled garden: exactly the planned hosts, among the entries we own.
   const wg = (await c.list('/ip/hotspot/walled-garden')).filter((w) => w.comment === WG_TAG);

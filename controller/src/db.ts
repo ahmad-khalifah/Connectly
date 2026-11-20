@@ -36,6 +36,9 @@ export type RouterRow = {
   wg_public_key: string | null;
 };
 
+/** One row of the router's /ip/hotspot/active list, as the controller stores it. */
+export type SessionSnapshot = { routerSessionId: string; user: string; mac: string; ip: string; uptimeSeconds: number; bytesIn: number; bytesOut: number };
+
 export type GrantRow = {
   id: string;
   purchase_id: string;
@@ -179,6 +182,49 @@ export class Db {
        where id = $1`,
       [routerId, JSON.stringify(r.result), r.error, r.fingerprint, r.version, r.board, r.ok],
     );
+  }
+
+  /**
+   * Makes network_sessions match the router's active hotspot list: sessions no
+   * longer on the router are ended, the rest are added or refreshed. A session
+   * is the router's own id plus the device's MAC, so an id the router reuses
+   * after a restart starts a new row instead of continuing an old one.
+   */
+  async syncSessions(routerId: string, locationId: string | null, sessions: SessionSnapshot[]): Promise<{ active: number; ended: number }> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const ended = await client.query(
+        `update public.network_sessions s set status = 'terminated', session_end = coalesce(session_end, now())
+          where s.router_id = $1 and s.status = 'active'
+            and not exists (select 1 from unnest($2::text[], $3::text[]) as c(sid, mac)
+                             where c.sid = s.router_session_id and c.mac = s.mac_address)`,
+        [routerId, sessions.map((x) => x.routerSessionId), sessions.map((x) => x.mac)]);
+      const users = [...new Set(sessions.map((x) => x.user))];
+      const { rows: grants } = users.length
+        ? await client.query<{ id: string; hotspot_username: string }>(
+          'select id, hotspot_username from public.network_authorizations where router_id = $1 and hotspot_username = any($2::text[])', [routerId, users])
+        : { rows: [] as { id: string; hotspot_username: string }[] };
+      const grantOf = new Map(grants.map((g) => [g.hotspot_username, g.id]));
+      for (const x of sessions) {
+        await client.query(
+          `insert into public.network_sessions (router_id, location_id, authorization_id, router_session_id, mac_address, ip_address,
+                                                uptime_seconds, bytes_in, bytes_out, session_start, last_seen_at, status)
+           values ($1, $2, $3, $4, $5, $6::inet, $7::bigint, $8::bigint, $9::bigint, now() - make_interval(secs => $10::double precision), now(), 'active')
+           on conflict (router_id, router_session_id) where status = 'active' and router_session_id is not null
+           do update set ip_address = excluded.ip_address, uptime_seconds = excluded.uptime_seconds,
+                         bytes_in = excluded.bytes_in, bytes_out = excluded.bytes_out, last_seen_at = now(),
+                         authorization_id = coalesce(public.network_sessions.authorization_id, excluded.authorization_id)`,
+          [routerId, locationId, grantOf.get(x.user) ?? null, x.routerSessionId, x.mac, x.ip, x.uptimeSeconds, x.bytesIn, x.bytesOut, x.uptimeSeconds]);
+      }
+      await client.query('commit');
+      return { active: sessions.length, ended: ended.rowCount ?? 0 };
+    } catch (e) {
+      await client.query('rollback').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
   }
 
   async recordHealth(routerId: string, h: { online: boolean; version?: string; uptimeSeconds?: number; cpu?: number; memory?: number; error?: string | null }): Promise<void> {

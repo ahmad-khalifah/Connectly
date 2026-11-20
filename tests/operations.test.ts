@@ -94,9 +94,15 @@ describe('portal and walled-garden settings', () => {
     expect(parsePortalSettings({ portal_url: 'https://getconnectly.net/portal', walled_garden_hosts: 'Checkout.Korapay.com\n*.korapay.com checkout.korapay.com' }))
       .toEqual({ ok: true, value: { portal_url: 'https://getconnectly.net/portal', walled_garden_hosts: ['*.korapay.com', 'checkout.korapay.com'] } });
   });
+  it('keeps a Vercel shareable link token, and nothing else, in the portal address', async () => {
+    const { parsePortalSettings } = await import('@/lib/network/settings');
+    const r = parsePortalSettings({ portal_url: 'https://x-git-y.vercel.app/portal?_vercel_share=tok123', walled_garden_hosts: '' });
+    expect(r).toEqual({ ok: true, value: { portal_url: 'https://x-git-y.vercel.app/portal?_vercel_share=tok123', walled_garden_hosts: [] } });
+  });
   it.each([
     [{ portal_url: 'http://getconnectly.net/portal' }, 'portal_url'],
     [{ portal_url: 'https://getconnectly.net/portal?x=1' }, 'portal_url'],
+    [{ portal_url: 'https://getconnectly.net/portal?_vercel_share=a&x=1' }, 'portal_url'],
     [{ portal_url: 'https://u:p@getconnectly.net/portal' }, 'portal_url'],
     [{ walled_garden_hosts: '*.com' }, 'walled_garden_hosts'],
     [{ walled_garden_hosts: 'not a host' }, 'walled_garden_hosts'],
