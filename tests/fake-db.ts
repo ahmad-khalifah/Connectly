@@ -30,6 +30,7 @@ export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<st
       gt(col: string, val: unknown) { op.filters.push([`${col}>`, val]); return chain; },
       neq(col: string, val: unknown) { op.filters.push([`${col}!=`, val]); return chain; },
       lte(col: string, val: unknown) { op.filters.push([`${col}<=`, val]); return chain; },
+      or(expr: string) { op.filters.push(['or', expr]); return chain; },
       order() { return chain; },
       limit(n: number) { op.filters.push(['limit', n]); return chain; },
       maybeSingle: () => Promise.resolve(run()),

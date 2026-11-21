@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Schibsted_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { appEnv } from "@/lib/env";
+import { EnvBanner } from "@/components/env-banner";
 
 const schibsted = Schibsted_Grotesk({
   variable: "--font-schibsted",
@@ -48,11 +48,7 @@ export default function RootLayout({
     >
       {/* Head is automatically managed by Next.js */}
       <body className="min-h-full flex flex-col">
-        {appEnv() !== "production" && (
-          <div className="w-full border-b border-warn/20 bg-warn-soft px-4 py-1.5 text-center text-xs font-semibold text-warn">
-            {appEnv() === 'preview' ? 'Staging' : 'Local'}: test data and sandbox payments only
-          </div>
-        )}
+        <EnvBanner />
         {children}
       </body>
     </html>

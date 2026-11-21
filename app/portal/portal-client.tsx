@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { initializeKoraCheckout } from '../actions/payment';
+import type { CheckoutResult } from '@/lib/payments/checkout';
 import CodeLogin from './code-login';
 import { Button } from '@/components/ui/button';
 import { Field, inputClass } from '@/components/ui/field';
@@ -62,7 +62,12 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
     setIsProcessing(true);
     try {
       // The server prices the plan from the database; the browser sends no amount.
-      const result = await initializeKoraCheckout({ mac, ip, routerId, locationId: location.id, planId: selected.id, phone: cleaned });
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mac, ip, routerId, locationId: location.id, planId: selected.id, phone: cleaned }),
+      });
+      const result = (await res.json()) as CheckoutResult;
       if (!result.ok) {
         setError(result.error);
         setIsProcessing(false);

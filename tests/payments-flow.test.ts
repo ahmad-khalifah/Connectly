@@ -376,12 +376,11 @@ describe('GET /api/purchase/status (what the customer sees after paying)', () =>
 // ---------------------------------------------------------------- return page
 describe('success page', () => {
   it('finds our reference when Korapay adds its own reference to the return address', async () => {
-    const { default: SuccessPage } = await import('@/app/success/page');
+    const { ourReference } = await import('@/lib/payment-reference');
     const ours = 'CONN_97c9db0f-7c51-47b0-abe8-4113b33c4bf2';
-    const el = await SuccessPage({ searchParams: Promise.resolve({ reference: [ours, 'KPY-CK-abc123'] }) });
-    expect(JSON.stringify(el)).toContain(ours);
-    expect(JSON.stringify(el)).not.toContain('No payment reference');
-    const none = await SuccessPage({ searchParams: Promise.resolve({ reference: ['KPY-CK-abc123'] }) });
-    expect(JSON.stringify(none)).toContain('No payment reference');
+    expect(ourReference([ours, 'KPY-CK-abc123'])).toBe(ours);
+    expect(ourReference(['KPY-CK-abc123', ours])).toBe(ours);
+    expect(ourReference(['KPY-CK-abc123'])).toBeNull();
+    expect(ourReference([])).toBeNull();
   });
 });
