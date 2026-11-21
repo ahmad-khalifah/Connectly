@@ -132,6 +132,9 @@ Same approach as the customer pages:
 - `proxy.ts` (Next.js middleware) was removed. OpenNext's middleware bundle
   could not read cookies (`cookie.parse` missing: error 1101 on any signed-in
   admin request), and every admin route now checks the caller itself.
+- `public/_headers` lets browsers keep Next.js script and style files (named
+  by content hash) for a year. Cloudflare's default makes the browser ask
+  again for every file on every page (about 1.2 s per admin page on staging).
 - Links do not prefetch: a prefetch is a Worker request (counted in the
   daily allowance) for a page that may never be opened.
 
