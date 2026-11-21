@@ -141,6 +141,30 @@ Same approach as the customer pages:
 Still through Next.js: `/api/cron/sms-reminders` (moves with the scheduled
 jobs) and the old redirect pages `/admin/apis`, `/admin/reports`, `/admin/usage`.
 
+## Scheduled jobs
+
+One Cron Trigger (`wrangler.jsonc` "triggers", every minute) calls
+`scheduled` in `worker.ts`. Each run does one slice, so it stays inside the
+10 ms of CPU a Free cron run gets (`lib/http/cron.ts`):
+
+- even minutes, **due texts** (`lib/notifications/sms-queue.ts`): one call to
+  `claim_due_sms` claims up to 5 texts (payment confirmations the payment page
+  did not ask for within 2 minutes, plans ending within the hour, plans that
+  ended within the hour), Termii sends them in parallel, and one call to
+  `record_sms_results` stores the results. Each text is claimed at most once
+  per purchase; a claim left unrecorded for 15 minutes is marked failed, never
+  sent again.
+- odd minutes, **missed payments**: one pending Korapay checkout from the last
+  24 hours is re-checked with Korapay, taking turns through the newest ten.
+
+`GET /api/cron/sms-reminders` (CRON_SECRET) sends a batch of due texts too,
+answered by the front door without Next.js, for the Network Controller's
+`APP_TICK_URL` and Vercel Cron. The rules live in the database:
+`supabase/migrations/20261121120000_sms_queue.sql`. Runs show in
+`wrangler tail` as `[SCHEDULED] {"task":"texts",...}` or `{"task":"pending",...}`.
+Until Termii approves the sender ID, every claimed text is recorded as
+"not sent: pending approval".
+
 ## Known warnings (expected)
 
 - `StaticAssetsIncrementalCache: Failed to set to read-only cache`: Next.js

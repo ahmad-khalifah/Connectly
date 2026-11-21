@@ -24,6 +24,12 @@
   "observability": {
     "enabled": true
   },
+  // Every minute, one small slice of scheduled work (worker.ts "scheduled"):
+  // even minutes send due texts, odd minutes re-check one pending checkout.
+  // Workers Free allows 5 Cron Triggers per account; this Worker uses one.
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   // A Worker deployed from this file is a staging (preview) deployment unless
   // the production environment below is chosen explicitly.
   "vars": {

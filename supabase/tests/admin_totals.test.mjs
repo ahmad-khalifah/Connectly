@@ -147,7 +147,7 @@ test('functions are callable by the service role only', async () => {
 
 test('rollback returns the schema to the previous migration exactly', async () => {
   const before = await fingerprint(await freshDb({ upTo: '20261119090000_router_hotspot.sql' }));
-  const db = await freshDb();
+  const db = await freshDb({ upTo: MIG });
   await db.exec(fs.readFileSync(path.join(ROOT, 'rollbacks', MIG.replace('.sql', '.rollback.sql')), 'utf8'));
   assert.equal(await fingerprint(db), before);
 });

@@ -126,6 +126,26 @@ export async function reconcileRecentPending({ limit = 10, maxAgeHours = 24 } = 
   return summary;
 }
 
+/** The payment confirmation text. Also used by the scheduled sender (lib/notifications/sms-queue.ts). */
+export function confirmationText(p: {
+  amountKobo: number | string | null;
+  planName: string | null;
+  locationName: string | null;
+  voucher: string | null;
+  expiresAt: string | null;
+  reference: string;
+}): string {
+  const until = p.expiresAt
+    ? new Date(p.expiresAt).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' })
+    : 'n/a';
+  return (
+    `Connectly: NGN ${(Number(p.amountKobo ?? 0) / 100).toLocaleString('en-NG')} received for ` +
+    `${p.planName ?? 'your plan'}${p.locationName ? ` at ${p.locationName}` : ''}. ` +
+    (p.voucher ? `Your WiFi code: ${p.voucher} (use it as username and password). ` : '') +
+    `Valid until ${until}. Ref ${p.reference}`
+  );
+}
+
 export type ConfirmationSms = 'sent' | 'failed' | 'already_claimed' | 'not_paid' | 'no_phone' | 'not_found';
 
 /**
@@ -152,14 +172,14 @@ export async function sendPaymentConfirmation(purchase: string | { reference: st
 
   const plan = (Array.isArray(p.plans) ? p.plans[0] : p.plans) as { name?: string } | null;
   const location = (Array.isArray(p.locations) ? p.locations[0] : p.locations) as { name?: string } | null;
-  const until = p.expires_at
-    ? new Date(p.expires_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' })
-    : 'n/a';
-  const body =
-    `Connectly: NGN ${((p.amount_kobo ?? 0) / 100).toLocaleString('en-NG')} received for ` +
-    `${plan?.name ?? 'your plan'}${location?.name ? ` at ${location.name}` : ''}. ` +
-    (voucher ? `Your WiFi code: ${voucher} (use it as username and password). ` : '') +
-    `Valid until ${until}. Ref ${p.reference}`;
+  const body = confirmationText({
+    amountKobo: p.amount_kobo,
+    planName: plan?.name ?? null,
+    locationName: location?.name ?? null,
+    voucher,
+    expiresAt: p.expires_at,
+    reference: p.reference,
+  });
 
   const { data: claimed, error } = await db
     .from('notifications')
