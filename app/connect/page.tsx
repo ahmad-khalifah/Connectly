@@ -1,9 +1,20 @@
 import { db } from '../../lib/db/client';
 import PortalClient from '../portal/portal-client';
-import { CheckCircle2 } from 'lucide-react';
+import CodeLogin from '../portal/code-login';
+import { hotspotLoginUrl } from '@/lib/network/customer-access';
+import { PortalShell } from '@/components/portal/portal-shell';
+import { LensMark } from '@/components/ui/lens-mark';
+import { Notice } from '@/components/ui/notice';
 
 export const dynamic = 'force-dynamic';
 
+type Loc = { id: string; name: string; slug: string };
+
+/**
+ * Location link (/connect?loc=<slug>, printed on QR codes) and the older
+ * router redirect (/connect?router=...). Only the router form sells plans:
+ * a location link alone cannot grant access, so it explains how to join.
+ */
 export default async function ConnectPage({
   searchParams,
 }: {
@@ -11,13 +22,12 @@ export default async function ConnectPage({
 }) {
   const { mac, ip, router: routerIdentifier, loc } = await searchParams;
 
-  let locationData = null;
-  let routerIdStr = '';
+  let location: Loc | null = null;
+  let routerId = '';
 
-  // 1. Resolve Location (Either by Admin URL 'loc' or Router Redirect)
   if (loc) {
-    const { data } = await db.from('locations').select('id, name, slug').eq('slug', loc).single();
-    locationData = data;
+    const { data } = await db.from('locations').select('id, name, slug').eq('slug', loc).maybeSingle();
+    location = data;
   } else if (routerIdentifier) {
     const { data: routerData } = await db
       .from('routers')
@@ -25,26 +35,43 @@ export default async function ConnectPage({
       .eq('identifier', routerIdentifier)
       .eq('lifecycle_status', 'active') // only an activated router sells plans
       .maybeSingle();
-    
-    if (routerData && routerData.locations) {
-      routerIdStr = routerData.id;
-      const locationRaw = routerData.locations as { id: string; name: string; slug: string } | { id: string; name: string; slug: string }[];
-      locationData = Array.isArray(locationRaw) ? locationRaw[0] : locationRaw;
+    if (routerData?.locations) {
+      routerId = routerData.id;
+      const raw = routerData.locations as Loc | Loc[];
+      location = Array.isArray(raw) ? raw[0] : raw;
     }
   }
 
-  if (!locationData) {
+  if (!location) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4 text-center">
-        <p className="text-red-600">Unrecognized network location.</p>
-      </div>
+      <PortalShell>
+        <Notice tone="bad" title="We do not recognise this location">
+          Check the link or QR code, or join the Connectly WiFi on site to see the plans.
+        </Notice>
+      </PortalShell>
     );
   }
 
-  // 2. Check existing authorization (Only possible if MAC is provided)
-  if (mac) {
-    const { data: device } = await db.from('devices').select('id').eq('mac_address', mac).single();
+  if (!routerId) {
+    return (
+      <PortalShell place={location.name}>
+        <div className="flex items-start gap-4">
+          <LensMark className="h-12 w-12" state="off" />
+          <div>
+            <h1 className="text-xl font-bold tracking-[-0.01em] text-ink">Join the WiFi to get online</h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted">
+              On your phone, open WiFi settings and join <span className="font-semibold text-ink">Connectly WiFi</span>. The sign-in page opens by itself and shows the plans for {location.name}.
+            </p>
+          </div>
+        </div>
+      </PortalShell>
+    );
+  }
 
+  const loginUrl = await hotspotLoginUrl(routerId);
+
+  if (mac) {
+    const { data: device } = await db.from('devices').select('id').eq('mac_address', mac).maybeSingle();
     if (device) {
       const { data: activeAuth } = await db
         .from('network_authorizations')
@@ -52,37 +79,34 @@ export default async function ConnectPage({
         .eq('device_id', device.id)
         .eq('status', 'active')
         .gt('expires_at', new Date().toISOString())
-        .single();
-
+        .limit(1)
+        .maybeSingle();
       if (activeAuth) {
         return (
-          <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6 text-center">
-            <div className="rounded-full bg-green-100 p-4">
-              <CheckCircle2 className="h-12 w-12 text-green-600" />
+          <PortalShell place={location.name}>
+            <div className="flex items-start gap-4">
+              <LensMark className="h-12 w-12" state="on" />
+              <h1 className="pt-2 text-xl font-bold tracking-[-0.01em] text-ink">Your plan is still running</h1>
             </div>
-            <h1 className="mt-6 text-2xl font-bold text-gray-900">You Are Connected</h1>
-            <p className="mt-2 text-gray-600">Your internet access is active.</p>
-          </main>
+            <section className="mt-6 rounded-[var(--radius-panel)] border border-line bg-surface p-5">
+              <CodeLogin loginUrl={loginUrl} heading="Not browsing? Enter your WiFi code to reconnect" />
+            </section>
+          </PortalShell>
         );
       }
     }
   }
 
-  // 3. Fetch active plans
   const { data: plans } = await db
     .from('plans')
-    .select('id, name, price_kobo, download_limit_kbps')
+    .select('id, name, price_kobo, speed_down_mbps, duration_seconds, device_limit, data_limit_mb')
     .eq('is_active', true)
-    .or(`allowed_location_ids.is.null,allowed_location_ids.cs.{${locationData.id}}`)
+    .or(`allowed_location_ids.is.null,allowed_location_ids.cs.{${location.id}}`)
     .order('price_kobo', { ascending: true });
 
   return (
-    <PortalClient 
-      mac={mac || ''} 
-      ip={ip || ''} 
-      routerId={routerIdStr} 
-      location={locationData} 
-      plans={plans || []} 
-    />
+    <PortalShell place={location.name}>
+      <PortalClient mac={mac || ''} ip={ip || ''} routerId={routerId} location={location} plans={plans || []} loginUrl={loginUrl} />
+    </PortalShell>
   );
 }

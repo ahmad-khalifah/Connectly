@@ -62,9 +62,44 @@ export async function POST(_req: Request, { params }: Ctx) {
       return json(201, { jobId: r.job_id, status: r.status, created: r.created });
     }
 
+    // ------------------------------------------------------- apply hotspot
+    // Queues router.configure_hotspot: the controller makes the router's
+    // hotspot match the saved settings and records the version it applied.
+    case 'apply-hotspot': {
+      if (router.lifecycle_status === 'retired') return json(409, { message: 'A retired router cannot be configured.' });
+      if (!router.credential_key_id) return json(409, { message: 'No API credential is stored yet.' });
+      const { data: hs } = await db.from('router_hotspot_settings').select('version').eq('router_id', id).maybeSingle();
+      if (!hs) return json(409, { message: 'Save the hotspot settings first.' });
+      const { data: pending } = await db
+        .from('controller_jobs')
+        .select('id, status')
+        .eq('router_id', id)
+        .eq('kind', 'router.configure_hotspot')
+        .in('status', ['queued', 'running'])
+        .limit(1)
+        .maybeSingle();
+      if (pending) return json(200, { jobId: pending.id, status: pending.status, created: false });
+      const { data, error } = await db.rpc('enqueue_job', {
+        p_kind: 'router.configure_hotspot',
+        p_router_id: id,
+        p_authorization_id: null,
+        p_payload: { version: hs.version },
+        p_idempotency_key: `hotspot:${id}:v${hs.version}:${Date.now()}`,
+        p_requested_by: who,
+      });
+      if (error) {
+        console.error('[HOTSPOT_ENQUEUE_ERROR]', error.code, error.message);
+        return json(500, { message: 'Could not queue the hotspot set-up.' });
+      }
+      await audit('router.hotspot_apply_requested', `Hotspot settings v${hs.version} queued for "${router.name}"`, { version: hs.version });
+      const r = data as { job_id: string; status: string; created: boolean };
+      return json(201, { jobId: r.job_id, status: r.status, created: r.created });
+    }
+
     // ------------------------------------------------------------ activate
     case 'activate': {
-      const lifecycleView: RouterForLifecycle = { ...router, has_credential: Boolean(router.credential_key_id) };
+      const { data: hotspot } = await db.from('router_hotspot_settings').select('version, applied_version').eq('router_id', id).maybeSingle();
+      const lifecycleView: RouterForLifecycle = { ...router, has_credential: Boolean(router.credential_key_id), hotspot: hotspot ?? null };
       const blockers = activationBlockers(lifecycleView);
       if (blockers.length) return json(409, { message: 'This router cannot be activated yet.', reasons: blockers });
 

@@ -91,11 +91,11 @@ export function planRow(p: PlanInput) {
     price_kobo: p.priceNaira * 100,
     duration_seconds: p.durationMinutes * 60,
     duration_minutes: p.durationMinutes,
-    download_limit_kbps: downKbps, // read by the portal and the hotspot rate limit
+    download_limit_kbps: downKbps, // older copy, kept in step
     upload_limit_kbps: upKbps,
     download_speed: downKbps,      // legacy admin columns
     upload_speed: upKbps,
-    speed_down_mbps: p.downloadMbps, // read by roaming verification
+    speed_down_mbps: p.downloadMbps, // what the controller enforces on the router
     speed_up_mbps: p.uploadMbps,
     device_limit: p.deviceLimit,
     data_limit_mb: p.dataLimitMb,
@@ -104,10 +104,14 @@ export function planRow(p: PlanInput) {
   };
 }
 
-/** Reads a plan row back into form values, preferring the canonical kbps columns. */
+/**
+ * Reads a plan row back into form values. speed_*_mbps comes first: it is what
+ * the controller puts on the router (rate limit), so the admin sees what
+ * customers actually get. The kbps columns are older copies kept in step.
+ */
 export function planToInput(row: Record<string, unknown>): PlanInput {
   const kbps = (a: unknown, b: unknown, mbps: unknown) =>
-    Number(a) > 0 ? Math.round(Number(a) / 1024) : Number(b) > 0 ? Math.round(Number(b) / 1024) : Number(mbps) || 1;
+    Number(mbps) > 0 ? Number(mbps) : Number(a) > 0 ? Math.round(Number(a) / 1024) : Number(b) > 0 ? Math.round(Number(b) / 1024) : 1;
   return {
     name: String(row.name ?? ''),
     priceNaira: Math.round(Number(row.price_kobo ?? 0) / 100),
@@ -200,4 +204,63 @@ export function friendlyDbError(error: { code?: string; message?: string } | nul
   if (error.code === '23505') return 'That slug is already used by another location.';
   if (error.code === '23503') return 'A linked record does not exist.';
   return fallback;
+}
+
+// ---------------------------------------------------------------- expenses
+
+/** Matches the CHECK constraint on public.expenses.category. */
+export const EXPENSE_CATEGORIES = ['backhaul', 'equipment', 'installation', 'repairs', 'power', 'staff', 'marketing', 'software', 'other'] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export type ExpenseInput = {
+  category: ExpenseCategory;
+  amountNaira: number;
+  locationId: string | null;
+  description: string;
+  expenseDate: string; // YYYY-MM-DD
+};
+
+/** Today's date in Lagos as YYYY-MM-DD. */
+export function lagosToday(now = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+}
+
+export function parseExpenseInput(body: unknown, now = new Date()): Parsed<ExpenseInput> {
+  if (!body || typeof body !== 'object') return { ok: false, error: 'Missing expense details.' };
+  const b = body as Record<string, unknown>;
+
+  const category = String(b.category ?? '');
+  if (!(EXPENSE_CATEGORIES as readonly string[]).includes(category)) return { ok: false, error: 'Choose a category.' };
+
+  const amount = typeof b.amountNaira === 'number' ? b.amountNaira : Number(String(b.amountNaira ?? '').replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000_000) return { ok: false, error: 'Amount must be more than ₦0 and at most ₦100,000,000.' };
+  if (Math.round(amount * 100) !== amount * 100) return { ok: false, error: 'Amount can have at most 2 decimal places (kobo).' };
+
+  const description = String(b.description ?? '').trim();
+  if (description.length < 3 || description.length > 300) return { ok: false, error: 'Description must be 3 to 300 characters.' };
+
+  const expenseDate = String(b.expenseDate ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate) || Number.isNaN(Date.parse(`${expenseDate}T00:00:00Z`))) return { ok: false, error: 'Enter the expense date.' };
+  if (expenseDate > lagosToday(now)) return { ok: false, error: 'Expense date cannot be in the future.' };
+  if (expenseDate < '2020-01-01') return { ok: false, error: 'Expense date is too far in the past.' };
+
+  const rawLoc = b.locationId;
+  let locationId: string | null = null;
+  if (rawLoc !== undefined && rawLoc !== null && rawLoc !== '') {
+    if (!isUuid(rawLoc)) return { ok: false, error: 'Unknown location.' };
+    locationId = rawLoc;
+  }
+
+  return { ok: true, value: { category: category as ExpenseCategory, amountNaira: amount, locationId, description, expenseDate } };
+}
+
+export function expenseRow(e: ExpenseInput, recordedBy: string) {
+  return {
+    category: e.category,
+    amount_ngn: e.amountNaira,
+    location_id: e.locationId,
+    description: e.description,
+    expense_date: e.expenseDate,
+    recorded_by: recordedBy,
+  };
 }

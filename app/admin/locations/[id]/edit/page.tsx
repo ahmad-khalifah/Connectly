@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin } from 'lucide-react';
 import { db } from '@/lib/db/client';
 import { isUuid, LOCATION_STATUSES, type LocationInput } from '@/lib/admin/inputs';
 import LocationForm from '../../location-form';
+import { PageHeader } from '@/components/admin/page-header';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,14 +30,8 @@ export default async function EditLocationPage({ params }: { params: Promise<{ i
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <Link href={`/admin/locations/${id}`} className="text-sm font-bold text-slate-500 hover:text-[#6d1825] transition-colors">
-        &larr; Back to {loc.name}
-      </Link>
-      <div className="flex items-center gap-2">
-        <MapPin className="h-6 w-6 text-[#6d1825]" />
-        <h1 className="text-2xl font-bold text-slate-900">Edit Facility</h1>
-      </div>
+    <div className="space-y-6">
+      <PageHeader back={<Link href={`/admin/locations/${id}`} className="font-semibold text-muted hover:text-brand">{loc.name}</Link>} title={`Edit ${loc.name}`} />
       <LocationForm mode="edit" locationId={id} initial={initial} institutions={institutions ?? []} />
     </div>
   );

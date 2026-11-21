@@ -11,7 +11,7 @@ export default async function LoginPage({
   return (
     <LoginForm
       initialError={
-        error === 'not_authorized' ? 'This account is not authorised to use the operations console.' : ''
+        error === 'not_authorized' ? 'This account is not on the admin list. Sign in with an admin account.' : ''
       }
     />
   );

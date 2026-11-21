@@ -81,3 +81,11 @@ describe('helpers', () => {
     expect(formatDuration(90)).toBe('90 min');
   });
 });
+
+describe('plan speed shown in the console', () => {
+  it('is the speed the controller enforces (speed_*_mbps) when older copies disagree', () => {
+    // Like the staging seed: kbps columns say 7/3, the enforced columns say 5/2.
+    expect(planToInput({ name: 'Seeded', price_kobo: 20000, duration_seconds: 3600, download_limit_kbps: 7168, upload_limit_kbps: 3072, speed_down_mbps: 5, speed_up_mbps: 2 }))
+      .toMatchObject({ downloadMbps: 5, uploadMbps: 2 });
+  });
+});

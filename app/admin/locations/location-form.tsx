@@ -3,14 +3,15 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LOCATION_STATUSES, LOCATION_TYPES, slugify, type LocationInput } from '@/lib/admin/inputs';
+import { Field, inputClass, selectClass } from '@/components/ui/field';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 
 type Institution = { id: string; name: string };
 type Props =
   | { mode: 'create'; institutions: Institution[] }
   | { mode: 'edit'; locationId: string; initial: LocationInput; institutions: Institution[] };
 
-const input =
-  'w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none transition-all focus:ring-1 focus:ring-[#6d1825] focus:border-[#6d1825]';
 
 const TYPE_LABELS: Record<string, string> = {
   campus_facility: 'Campus facility', hostel: 'Hostel', market: 'Market', office: 'Office',
@@ -35,11 +36,13 @@ export default function LocationForm(props: Props) {
     institutionId: initial?.institutionId ?? '',
   });
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+  const [slugOk, setSlugOk] = useState(false);
+  const slugChanged = props.mode === 'edit' && initial !== null && form.slug !== initial.slug;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (props.mode === 'edit' && initial && form.slug !== initial.slug &&
-      !window.confirm('Changing the slug changes this location’s portal link. Printed QR codes that use the old link will stop working. Continue?')) {
+    if (slugChanged && !slugOk) {
+      setError('Tick the box to confirm the link change, or put the old link name back.');
       return;
     }
     setLoading(true);
@@ -51,86 +54,82 @@ export default function LocationForm(props: Props) {
         body: JSON.stringify({ ...form, institutionId: form.institutionId || null }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Failed to save the location.');
+      if (!res.ok) throw new Error(data.message || 'The location was not saved.');
       const id = props.mode === 'edit' ? props.locationId : data.data?.id;
       router.push(id ? `/admin/locations/${id}` : '/admin/locations');
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save the location.');
+      setError(err instanceof Error ? err.message : 'The location was not saved.');
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-name">Location Name</label>
-        <input id="loc-name" type="text" required maxLength={255} placeholder="e.g., Silver Hostel Block B" className={input}
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-5 rounded-[var(--radius-panel)] border border-line bg-surface p-6">
+      <Field label="Location name" htmlFor="loc-name" hint="As customers know it, for example “Garki Market, Aliyu Modibbo Block”.">
+        <input id="loc-name" type="text" required maxLength={255} className={inputClass}
           value={form.name}
           onChange={(e) => set(slugTouched ? { name: e.target.value } : { name: e.target.value, slug: slugify(e.target.value) })} />
-      </div>
+      </Field>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-slug">URL Slug</label>
-        <input id="loc-slug" type="text" required maxLength={100} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="silver-hostel-b"
-          className={`${input} bg-gray-50 font-mono`} value={form.slug}
-          onChange={(e) => { setSlugTouched(true); set({ slug: e.target.value.toLowerCase() }); }} />
-        <p className="text-xs text-gray-500 mt-1">Forms the portal and QR code link: /connect?loc={form.slug || '…'}</p>
-      </div>
+      <Field label="Link name" htmlFor="loc-slug" hint={<>Used in the information link: /connect?loc={form.slug || '…'}. Lowercase letters, numbers and dashes.</>}>
+        <input id="loc-slug" type="text" required maxLength={100} pattern="[a-z0-9]+(-[a-z0-9]+)*" className={inputClass} value={form.slug}
+          onChange={(e) => { setSlugTouched(true); setSlugOk(false); set({ slug: e.target.value.toLowerCase() }); }} />
+      </Field>
+      {slugChanged && (
+        <Notice tone="warn" title="This changes the location's information link">
+          Posters and QR codes printed with /connect?loc={initial?.slug} will stop working.
+          <label className="mt-2 flex items-center gap-2 font-semibold">
+            <input type="checkbox" className="h-4 w-4" checked={slugOk} onChange={(e) => setSlugOk(e.target.checked)} /> I understand, change it
+          </label>
+        </Notice>
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-building">Building / Zone</label>
-          <input id="loc-building" type="text" maxLength={100} placeholder="e.g., Block B" className={input}
-            value={form.building} onChange={(e) => set({ building: e.target.value })} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-type">Type</label>
-          <select id="loc-type" className={`${input} bg-white`} value={form.locationType} onChange={(e) => set({ locationType: e.target.value })}>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Building or zone" htmlFor="loc-building" optional>
+          <input id="loc-building" type="text" maxLength={100} className={inputClass} value={form.building} onChange={(e) => set({ building: e.target.value })} />
+        </Field>
+        <Field label="Type of place" htmlFor="loc-type">
+          <select id="loc-type" className={selectClass} value={form.locationType} onChange={(e) => set({ locationType: e.target.value })}>
             {LOCATION_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
           </select>
-        </div>
+        </Field>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-address">Address</label>
-        <input id="loc-address" type="text" maxLength={500} className={input} value={form.address} onChange={(e) => set({ address: e.target.value })} />
-      </div>
+      <Field label="Address" htmlFor="loc-address" optional>
+        <input id="loc-address" type="text" maxLength={500} className={inputClass} value={form.address} onChange={(e) => set({ address: e.target.value })} />
+      </Field>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-phone">Site contact phone</label>
-          <input id="loc-phone" type="tel" inputMode="tel" placeholder="0803 000 0000" className={input}
-            value={form.contactPhone} onChange={(e) => set({ contactPhone: e.target.value })} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-inst">Institution</label>
-          <select id="loc-inst" className={`${input} bg-white`} value={form.institutionId} onChange={(e) => set({ institutionId: e.target.value })}>
-            <option value="">Independent facility</option>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Site contact phone" htmlFor="loc-phone" optional>
+          <input id="loc-phone" type="tel" inputMode="tel" placeholder="0803 000 0000" className={inputClass} value={form.contactPhone} onChange={(e) => set({ contactPhone: e.target.value })} />
+        </Field>
+        <Field label="Institution" htmlFor="loc-inst">
+          <select id="loc-inst" className={selectClass} value={form.institutionId} onChange={(e) => set({ institutionId: e.target.value })}>
+            <option value="">None (independent site)</option>
             {props.institutions.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>
-        </div>
+        </Field>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="loc-status">Network status</label>
-          <select id="loc-status" className={`${input} bg-white`} value={form.status} onChange={(e) => set({ status: e.target.value as typeof form.status })}>
+      <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-2">
+        <Field label="Site status" htmlFor="loc-status" hint="Your own note on the site. Router health is measured separately.">
+          <select id="loc-status" className={selectClass} value={form.status} onChange={(e) => set({ status: e.target.value as typeof form.status })}>
             {LOCATION_STATUSES.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
           </select>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-gray-700 pb-2.5">
-          <input type="checkbox" checked={form.isActive} onChange={(e) => set({ isActive: e.target.checked })} />
-          Accepting payments
+        </Field>
+        <label className="flex items-center gap-2 pb-7 text-sm font-semibold">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--color-brand)]" checked={form.isActive} onChange={(e) => set({ isActive: e.target.checked })} />
+          Selling plans here
         </label>
       </div>
 
-      {error && <p className="text-sm text-red-600 font-medium" role="alert">{error}</p>}
+      {error && <Notice tone="bad" title="Not saved">{error}</Notice>}
 
-      <button type="submit" disabled={loading}
-        className="w-full rounded-lg py-2.5 text-sm font-bold text-white transition-opacity disabled:opacity-50 shadow-sm bg-[#6d1825]">
-        {loading ? 'Saving…' : props.mode === 'edit' ? 'Save Changes' : 'Save Location'}
-      </button>
+      <div className="flex gap-2">
+        <Button type="submit" disabled={loading}>{loading ? 'Saving…' : props.mode === 'edit' ? 'Save changes' : 'Create location'}</Button>
+        <Button variant="secondary" onClick={() => router.back()}>Cancel</Button>
+      </div>
     </form>
   );
 }

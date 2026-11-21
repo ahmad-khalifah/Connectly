@@ -21,7 +21,7 @@ type CheckoutInput = {
   planId: string;
   phone: string;
   locationId: string;
-  routerId?: string;
+  routerId: string;
   mac?: string;
   ip?: string;
 };
@@ -72,11 +72,12 @@ async function startCheckout(payload: CheckoutInput): Promise<{ checkoutUrl: str
   const amountKobo = Number(plan.price_kobo);
   if (!Number.isInteger(amountKobo) || amountKobo <= 0) throw new CheckoutError('This plan is not available.');
 
-  if (routerId) {
-    const { data: router } = await db.from('routers').select('id, location_id, lifecycle_status').eq('id', routerId).maybeSingle();
-    if (!router || router.location_id !== location.id) throw new CheckoutError('Unrecognised network equipment.');
-    if (router.lifecycle_status !== 'active') throw new CheckoutError('This network is not taking payments yet.');
-  }
+  // Access is granted on a router, so a purchase without one could be paid
+  // and never turn into internet access. Customers buy from the WiFi login page.
+  if (!routerId) throw new CheckoutError('Please connect to the Connectly WiFi network to buy a plan.');
+  const { data: router } = await db.from('routers').select('id, location_id, lifecycle_status').eq('id', routerId).maybeSingle();
+  if (!router || router.location_id !== location.id) throw new CheckoutError('Unrecognised network equipment.');
+  if (router.lifecycle_status !== 'active') throw new CheckoutError('This network is not taking payments yet.');
 
   const reference = `CONN_${randomUUID()}`;
   const baseUrl = appUrl();

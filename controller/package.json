@@ -1,0 +1,24 @@
+{
+  "name": "connectly-controller",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Connectly Network Controller: runs router jobs from the database over WireGuard.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "check": "node src/main.ts --check",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "typescript": "^5.9.3"
+  }
+}

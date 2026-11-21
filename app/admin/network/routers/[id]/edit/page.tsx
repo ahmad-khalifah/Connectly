@@ -4,6 +4,8 @@ import { db } from '@/lib/db/client';
 import { isUuid } from '@/lib/admin/inputs';
 import type { ConnectionMethod, RouterInput } from '@/lib/network/routers';
 import RouterForm from '../../../router-form';
+import { PageHeader } from '@/components/admin/page-header';
+import { Notice } from '@/components/ui/notice';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,13 +34,12 @@ export default async function EditRouterPage({ params }: { params: Promise<{ id:
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <Link href={`/admin/network/routers/${id}`} className="text-sm font-bold text-slate-500 hover:text-[#6d1825]">&larr; Back to {initial.name}</Link>
-      <h1 className="text-2xl font-bold text-slate-900">Edit router</h1>
+    <div className="space-y-6">
+      <PageHeader back={<Link href={`/admin/network/routers/${id}`} className="font-semibold text-muted hover:text-brand">{initial.name}</Link>} title="Edit router" />
       {editable ? (
         <RouterForm mode="edit" routerId={id} initial={initial} locations={locations ?? []} />
       ) : (
-        <p className="text-sm text-slate-600">An {r.lifecycle_status} router cannot be edited. Suspend it first.</p>
+        <Notice tone="info" title={`An ${r.lifecycle_status} router cannot be edited`}>Suspend it first.</Notice>
       )}
     </div>
   );

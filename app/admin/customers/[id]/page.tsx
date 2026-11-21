@@ -1,18 +1,24 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { User, Receipt, MessageSquare } from 'lucide-react';
 import { db } from '@/lib/db/client';
 import { isUuid } from '@/lib/admin/inputs';
+import { smsStatusLabel } from '@/lib/sms';
+import { requestTime } from '@/lib/time';
+import { PageHeader } from '@/components/admin/page-header';
+import { Stat, StatGrid } from '@/components/admin/stat-grid';
+import { EmptyRow, lagos, TableFrame, td, th, tr } from '@/components/admin/table';
+import { Badge, type BadgeTone } from '@/components/ui/badge';
+import { Panel } from '@/components/ui/panel';
 
 export const dynamic = 'force-dynamic';
 
-/** The paid purchase whose access window is still open, if any. */
-function currentAccess<T extends { expires_at: string | null }>(paid: T[]): T | undefined {
-  const now = Date.now();
-  return paid.find((p) => p.expires_at && new Date(p.expires_at).getTime() > now);
-}
-
-const fmt = (d: string | null) => (d ? new Date(d).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
+  paid: { label: 'Paid', tone: 'ok' },
+  pending: { label: 'Not completed', tone: 'warn' },
+  failed: { label: 'Failed', tone: 'bad' },
+};
+const SMS_TONE: Record<string, BadgeTone> = { ok: 'ok', bad: 'bad', neutral: 'neutral', waiting: 'warn' };
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,7 +31,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   // before the customer record existed still appear.
   const [{ data: purchases }, { data: devices }] = await Promise.all([
     db.from('purchases')
-      .select('id, reference, status, amount_paid, amount_kobo, net_amount_ngn, gateway_fee_ngn, created_at, paid_at, expires_at, failure_reason, plans(name), locations(name)')
+      .select('id, reference, status, amount_paid, amount_kobo, net_amount_ngn, created_at, paid_at, expires_at, failure_reason, plans(name), locations(name), network_authorizations(status, revoked_at, voucher_code)')
       .or(/^\d{6,20}$/.test(customer.phone_number) ? `customer_id.eq.${id},phone_number.eq.${customer.phone_number}` : `customer_id.eq.${id}`)
       .order('created_at', { ascending: false })
       .limit(100),
@@ -39,102 +45,77 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     : { data: [] as { id: string; purchase_id: string; status: string; created_at: string; last_error: string | null }[] };
   const smsByPurchase = new Map((sms ?? []).map((n) => [n.purchase_id, n]));
 
+  const now = requestTime();
+  const grantOf = (p: (typeof list)[number]) => one(p.network_authorizations as { status: string; revoked_at: string | null; voucher_code: string | null }[] | null);
   const paid = list.filter((p) => p.status === 'paid');
-  const totalSpent = paid.reduce((acc, p) => acc + Number(p.amount_paid || p.net_amount_ngn || 0), 0);
-  const current = currentAccess(paid);
-  const currentPlan = current ? (Array.isArray(current.plans) ? current.plans[0] : current.plans) : null;
+  const amountOf = (p: (typeof list)[number]) =>
+    p.amount_paid !== null && p.amount_paid !== undefined ? Number(p.amount_paid) : Number(p.amount_kobo ?? 0) / 100 || Number(p.net_amount_ngn || 0);
+  const totalSpent = paid.reduce((acc, p) => acc + amountOf(p), 0);
+  // A plan is current only if its end time is ahead and it was not revoked.
+  const current = paid.find((p) => p.expires_at && Date.parse(p.expires_at) > now && !(grantOf(p)?.revoked_at || grantOf(p)?.status === 'revoked'));
 
   return (
     <div className="space-y-6">
-      <Link href="/admin/customers" className="text-sm font-bold text-slate-500 hover:text-[#6d1825]">&larr; Back to Customers</Link>
+      <PageHeader
+        back={<Link href="/admin/customers" className="font-semibold text-muted hover:text-brand">Customers</Link>}
+        title={<span className="tnum">+{customer.phone_number}</span>}
+        description={`Customer since ${lagos(customer.created_at)}`}
+      />
 
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <User className="h-6 w-6 text-[#6d1825]" /> <span className="font-mono">+{customer.phone_number}</span>
-        </h1>
-        <p className="text-sm text-slate-500">Customer since {fmt(customer.created_at)}</p>
-      </div>
+      <StatGrid cols={3}>
+        <Stat label="Current plan" value={current ? one(current.plans)?.name ?? 'Running' : 'None running'} note={current ? `Ends ${lagos(current.expires_at)}` : undefined} tone={current ? 'ok' : undefined} />
+        <Stat label="Paid purchases" value={paid.length} />
+        <Stat label="Total paid" value={`₦${totalSpent.toLocaleString('en-NG')}`} />
+      </StatGrid>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <span className="text-xs text-slate-400 block mb-1">Current access</span>
-          {current ? (
-            <>
-              <p className="text-lg font-bold text-emerald-700">{currentPlan?.name ?? 'Active'}</p>
-              <p className="text-xs text-slate-500">Until {fmt(current.expires_at)}</p>
-            </>
-          ) : (
-            <p className="text-lg font-bold text-slate-500">None active</p>
-          )}
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <span className="text-xs text-slate-400 block mb-1">Paid purchases</span>
-          <p className="text-2xl font-bold text-slate-900 font-mono">{paid.length}</p>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <span className="text-xs text-slate-400 block mb-1">Total paid</span>
-          <p className="text-2xl font-bold text-slate-900 font-mono">₦{totalSpent.toLocaleString('en-NG')}</p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200">
-          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <Receipt className="h-4 w-4 text-[#6d1825]" /> Purchase history
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs uppercase text-slate-500 border-b border-slate-100">
-              <tr>
-                <th className="px-4 py-3">Date</th><th className="px-4 py-3">Plan</th><th className="px-4 py-3">Location</th>
-                <th className="px-4 py-3">Amount</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Expires</th>
-                <th className="px-4 py-3">SMS</th><th className="px-4 py-3">Reference</th>
+      <TableFrame>
+        <thead>
+          <tr>
+            <th className={th}>Date</th><th className={th}>Plan</th><th className={th}>Location</th>
+            <th className={`${th} text-right`}>Amount</th><th className={th}>Payment</th><th className={th}>WiFi code</th><th className={th}>Ends</th>
+            <th className={th}>SMS</th><th className={th}>Reference</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((p) => {
+            const note = smsByPurchase.get(p.id);
+            const label = note ? smsStatusLabel(note.status, note.last_error) : null;
+            const grant = grantOf(p);
+            const st = STATUS[p.status] ?? { label: p.status, tone: 'neutral' as BadgeTone };
+            return (
+              <tr key={p.id} className={tr}>
+                <td className={`${td} tnum whitespace-nowrap text-muted`}>{lagos(p.created_at)}</td>
+                <td className={td}>{one(p.plans)?.name ?? '—'}</td>
+                <td className={`${td} text-muted`}>{one(p.locations)?.name ?? '—'}</td>
+                <td className={`${td} tnum text-right`}>₦{amountOf(p).toLocaleString('en-NG')}</td>
+                <td className={td}>
+                  <Badge tone={st.tone}>{st.label}</Badge>
+                  {p.failure_reason && <span className="mt-1 block text-[12px] text-subtle">{p.failure_reason}</span>}
+                </td>
+                <td className={td}>
+                  {grant?.voucher_code ? (
+                    <span className="font-semibold tracking-wider">{grant.voucher_code}</span>
+                  ) : '—'}
+                  {grant && <span className="block text-[12px] text-subtle">{grant.status === 'revoked' ? 'Revoked' : grant.status === 'expired' ? 'Ended' : grant.status === 'active' ? 'On the router' : 'Being added'}</span>}
+                </td>
+                <td className={`${td} tnum whitespace-nowrap text-muted`}>{lagos(p.expires_at)}</td>
+                <td className={td}>{label ? <span title={note?.last_error ?? undefined}><Badge tone={SMS_TONE[label.tone]}>{label.text}</Badge></span> : '—'}</td>
+                <td className={`${td} break-all text-[12px] text-subtle`}>{p.reference}</td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {list.map((p) => {
-                const plan = Array.isArray(p.plans) ? p.plans[0] : p.plans;
-                const loc = Array.isArray(p.locations) ? p.locations[0] : p.locations;
-                const amount = p.status === 'paid' ? Number(p.amount_paid || p.net_amount_ngn || 0) : Number(p.amount_kobo ?? 0) / 100 || Number(p.net_amount_ngn || 0);
-                const note = smsByPurchase.get(p.id);
-                return (
-                  <tr key={p.id}>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-500">{fmt(p.created_at)}</td>
-                    <td className="px-4 py-2 text-slate-900">{plan?.name ?? '—'}</td>
-                    <td className="px-4 py-2 text-slate-600">{loc?.name ?? '—'}</td>
-                    <td className="px-4 py-2 font-mono">₦{amount.toLocaleString('en-NG')}</td>
-                    <td className="px-4 py-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${p.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : p.status === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
-                      {p.failure_reason && <span className="block text-[11px] text-slate-400 mt-0.5">{p.failure_reason}</span>}
-                    </td>
-                    <td className="px-4 py-2 whitespace-nowrap text-slate-500">{fmt(p.expires_at)}</td>
-                    <td className="px-4 py-2 text-xs">
-                      {note ? (
-                        <span className={`inline-flex items-center gap-1 ${note.status === 'sent' ? 'text-emerald-700' : note.status === 'failed' ? 'text-red-600' : 'text-amber-700'}`} title={note.last_error ?? undefined}>
-                          <MessageSquare className="h-3 w-3" /> {note.status}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className="px-4 py-2 font-mono text-[11px] text-slate-400">{p.reference}</td>
-                  </tr>
-                );
-              })}
-              {list.length === 0 && <tr><td colSpan={8} className="p-6 text-center text-xs text-slate-400">No purchases.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            );
+          })}
+          {list.length === 0 && <EmptyRow cols={9}>No purchases.</EmptyRow>}
+        </tbody>
+      </TableFrame>
 
       {(devices ?? []).length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Devices</h2>
-          <ul className="text-sm space-y-1">
+        <Panel title="Devices" description="Device addresses seen at checkout.">
+          <ul className="divide-y divide-line text-sm">
             {(devices ?? []).map((d) => (
-              <li key={d.id} className="flex justify-between font-mono text-slate-700"><span>{d.mac_address}</span><span className="text-xs text-slate-400">{fmt(d.last_seen_at)}</span></li>
+              <li key={d.id} className="flex justify-between py-2"><span className="tnum">{String(d.mac_address)}</span><span className="text-muted">Last seen {lagos(d.last_seen_at)}</span></li>
             ))}
           </ul>
-        </div>
+        </Panel>
       )}
     </div>
   );

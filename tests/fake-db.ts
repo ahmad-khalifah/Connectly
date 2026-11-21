@@ -3,7 +3,7 @@
 // Each test supplies handlers; every call is recorded for assertions.
 
 type Result = { data: unknown; error: { code?: string; message: string } | null };
-type Op = { table: string; action: 'insert' | 'select' | 'update'; values?: unknown; filters: [string, unknown][] };
+type Op = { table: string; action: 'insert' | 'select' | 'update' | 'upsert' | 'delete'; values?: unknown; filters: [string, unknown][] };
 export type Handler = (op: Op) => Result;
 
 export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<string, unknown>) => Result = () => ({ data: null, error: null })) {
@@ -18,7 +18,9 @@ export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<st
     };
     const chain: Record<string, unknown> = {
       insert(values: unknown) { op.action = 'insert'; op.values = values; return chain; },
+      upsert(values: unknown) { op.action = 'upsert'; op.values = values; return chain; },
       update(values: unknown) { op.action = 'update'; op.values = values; return chain; },
+      delete() { op.action = 'delete'; return chain; },
       select() { return chain; },
       eq(col: string, val: unknown) { op.filters.push([col, val]); return chain; },
       gte(col: string, val: unknown) { op.filters.push([`${col}>=`, val]); return chain; },
@@ -26,6 +28,8 @@ export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<st
       in(col: string, vals: unknown[]) { op.filters.push([`${col} in`, vals]); return chain; },
       is(col: string, val: unknown) { op.filters.push([`${col} is`, val]); return chain; },
       gt(col: string, val: unknown) { op.filters.push([`${col}>`, val]); return chain; },
+      neq(col: string, val: unknown) { op.filters.push([`${col}!=`, val]); return chain; },
+      lte(col: string, val: unknown) { op.filters.push([`${col}<=`, val]); return chain; },
       order() { return chain; },
       limit(n: number) { op.filters.push(['limit', n]); return chain; },
       maybeSingle: () => Promise.resolve(run()),

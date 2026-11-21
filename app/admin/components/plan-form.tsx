@@ -3,15 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PlanInput } from '@/lib/admin/inputs';
+import { Field, inputClass, selectClass } from '@/components/ui/field';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
+import { naira, planData, planDevices, planDuration, planSpeed } from '@/lib/plan-format';
 
 type LocationOption = { id: string; name: string; is_active: boolean | null };
 
 type Props =
   | { mode: 'create'; locations: LocationOption[] }
   | { mode: 'edit'; planId: string; initial: PlanInput; locations: LocationOption[] };
-
-const input =
-  'w-full rounded-lg border border-gray-300 p-2.5 text-sm outline-none transition-all focus:ring-1 focus:ring-[#6d1825] focus:border-[#6d1825]';
 
 function splitDuration(minutes: number): { value: string; unit: 'minutes' | 'hours' | 'days' } {
   if (minutes > 0 && minutes % 1440 === 0) return { value: String(minutes / 1440), unit: 'days' };
@@ -40,13 +41,11 @@ export default function PlanForm(props: Props) {
     isActive: initial?.isActive ?? true,
   });
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+  const factor = form.durationUnit === 'days' ? 1440 : form.durationUnit === 'hours' ? 60 : 1;
+  const minutes = Math.round(Number(form.durationValue || 0) * factor);
 
   const toggleLocation = (id: string) =>
-    set({
-      allowedLocationIds: form.allowedLocationIds.includes(id)
-        ? form.allowedLocationIds.filter((x) => x !== id)
-        : [...form.allowedLocationIds, id],
-    });
+    set({ allowedLocationIds: form.allowedLocationIds.includes(id) ? form.allowedLocationIds.filter((x) => x !== id) : [...form.allowedLocationIds, id] });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,12 +55,10 @@ export default function PlanForm(props: Props) {
       return;
     }
     setLoading(true);
-
-    const factor = form.durationUnit === 'days' ? 1440 : form.durationUnit === 'hours' ? 60 : 1;
     const payload = {
       name: form.name,
       priceNaira: Number(form.priceNaira),
-      durationMinutes: Math.round(Number(form.durationValue) * factor),
+      durationMinutes: minutes,
       downloadMbps: Number(form.downloadMbps),
       uploadMbps: Number(form.uploadMbps),
       deviceLimit: Number(form.deviceLimit),
@@ -69,7 +66,6 @@ export default function PlanForm(props: Props) {
       allowedLocationIds: form.everywhere ? null : form.allowedLocationIds,
       isActive: form.isActive,
     };
-
     try {
       const res = await fetch(props.mode === 'edit' ? `/api/admin/plans/${props.planId}` : '/api/admin/plans', {
         method: props.mode === 'edit' ? 'PATCH' : 'POST',
@@ -77,110 +73,105 @@ export default function PlanForm(props: Props) {
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || 'Failed to save the plan.');
+      if (!res.ok) throw new Error(data.message || 'The plan was not saved.');
       router.push('/admin/plans');
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save the plan.');
+      setError(err instanceof Error ? err.message : 'The plan was not saved.');
       setLoading(false);
     }
   };
 
+  const details = [planDuration(minutes * 60), planData(form.dataLimitMb ? Number(form.dataLimitMb) : null), planDevices(Number(form.deviceLimit) || 1), planSpeed(Number(form.downloadMbps) || null)].filter(Boolean);
+
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-      <h2 className="font-semibold text-gray-900 mb-2 border-b pb-2">
-        {props.mode === 'edit' ? 'Edit Plan' : 'Create New Plan'}
-      </h2>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <form onSubmit={handleSubmit} className="space-y-5 rounded-[var(--radius-panel)] border border-line bg-surface p-6">
+        <Field label="Plan name" htmlFor="plan-name" hint="Customers see this name, so say what they get, for example “1 day” or “Weekly, 2 devices”.">
+          <input id="plan-name" type="text" required maxLength={100} placeholder="1 day" className={inputClass} value={form.name} onChange={(e) => set({ name: e.target.value })} />
+        </Field>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-name">Plan Name</label>
-        <input id="plan-name" type="text" required maxLength={100} placeholder="e.g., 7 Days Unlimited" className={input}
-          value={form.name} onChange={(e) => set({ name: e.target.value })} />
-      </div>
+        <Field label="Price (₦)" htmlFor="plan-price" hint={props.mode === 'edit' ? 'Applies to new purchases only. Past purchases keep what they paid.' : 'At least ₦50.'}>
+          <input id="plan-price" type="number" required min="50" step="1" placeholder="500" className={inputClass} value={form.priceNaira} onChange={(e) => set({ priceNaira: e.target.value })} />
+        </Field>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-price">Price (₦)</label>
-        <input id="plan-price" type="number" required min="50" step="1" placeholder="500" className={input}
-          value={form.priceNaira} onChange={(e) => set({ priceNaira: e.target.value })} />
-        {props.mode === 'edit' && (
-          <p className="text-xs text-gray-500 mt-1">Price changes apply to new purchases only. Past purchases keep what they were charged.</p>
-        )}
-      </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Duration" htmlFor="plan-duration">
+            <input id="plan-duration" type="number" required min="1" placeholder="24" className={inputClass} value={form.durationValue} onChange={(e) => set({ durationValue: e.target.value })} />
+          </Field>
+          <Field label="Unit" htmlFor="plan-unit">
+            <select id="plan-unit" className={selectClass} value={form.durationUnit} onChange={(e) => set({ durationUnit: e.target.value as typeof form.durationUnit })}>
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </select>
+          </Field>
+        </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-duration">Duration</label>
-          <input id="plan-duration" type="number" required min="1" placeholder="24" className={input}
-            value={form.durationValue} onChange={(e) => set({ durationValue: e.target.value })} />
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Download speed (Mbps)" htmlFor="plan-dl">
+            <input id="plan-dl" type="number" required min="1" max="1000" step="1" className={inputClass} value={form.downloadMbps} onChange={(e) => set({ downloadMbps: e.target.value })} />
+          </Field>
+          <Field label="Upload speed (Mbps)" htmlFor="plan-ul">
+            <input id="plan-ul" type="number" required min="1" max="1000" step="1" className={inputClass} value={form.uploadMbps} onChange={(e) => set({ uploadMbps: e.target.value })} />
+          </Field>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-unit">Unit</label>
-          <select id="plan-unit" className={`${input} bg-white`} value={form.durationUnit}
-            onChange={(e) => set({ durationUnit: e.target.value as typeof form.durationUnit })}>
-            <option value="minutes">Minutes</option>
-            <option value="hours">Hours</option>
-            <option value="days">Days</option>
-          </select>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-dl">Download (Mbps)</label>
-          <input id="plan-dl" type="number" required min="1" max="1000" step="1" className={input}
-            value={form.downloadMbps} onChange={(e) => set({ downloadMbps: e.target.value })} />
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Devices per purchase" htmlFor="plan-devices" hint="Enforced by the router.">
+            <input id="plan-devices" type="number" required min="1" max="10" step="1" className={inputClass} value={form.deviceLimit} onChange={(e) => set({ deviceLimit: e.target.value })} />
+          </Field>
+          <Field label="Data cap (MB)" htmlFor="plan-cap" optional hint="Empty for unlimited. 1 GB = 1024 MB.">
+            <input id="plan-cap" type="number" min="1" step="1" placeholder="Unlimited" className={inputClass} value={form.dataLimitMb} onChange={(e) => set({ dataLimitMb: e.target.value })} />
+          </Field>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-ul">Upload (Mbps)</label>
-          <input id="plan-ul" type="number" required min="1" max="1000" step="1" className={input}
-            value={form.uploadMbps} onChange={(e) => set({ uploadMbps: e.target.value })} />
-        </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-devices">Devices per purchase</label>
-          <input id="plan-devices" type="number" required min="1" max="10" step="1" className={input}
-            value={form.deviceLimit} onChange={(e) => set({ deviceLimit: e.target.value })} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="plan-cap">Data cap (MB)</label>
-          <input id="plan-cap" type="number" min="1" step="1" placeholder="Unlimited" className={input}
-            value={form.dataLimitMb} onChange={(e) => set({ dataLimitMb: e.target.value })} />
-        </div>
-      </div>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold text-ink">Where customers can buy it</legend>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4 accent-[var(--color-brand)]" checked={form.everywhere} onChange={(e) => set({ everywhere: e.target.checked })} />
+            Every location
+          </label>
+          {!form.everywhere && (
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-[var(--radius-control)] border border-line p-3">
+              {props.locations.length === 0 && <p className="text-[13px] text-muted">No locations yet.</p>}
+              {props.locations.map((loc) => (
+                <label key={loc.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="h-4 w-4 accent-[var(--color-brand)]" checked={form.allowedLocationIds.includes(loc.id)} onChange={() => toggleLocation(loc.id)} />
+                  {loc.name}
+                  {loc.is_active === false && <span className="text-[12px] text-subtle">(not selling)</span>}
+                </label>
+              ))}
+            </div>
+          )}
+        </fieldset>
 
-      <fieldset className="space-y-2">
-        <legend className="block text-sm font-medium text-gray-700 mb-1">Where can customers buy it?</legend>
-        <label className="flex items-center gap-2 text-sm text-gray-700">
-          <input type="checkbox" checked={form.everywhere} onChange={(e) => set({ everywhere: e.target.checked })} />
-          Every location
+        <label className="flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--color-brand)]" checked={form.isActive} onChange={(e) => set({ isActive: e.target.checked })} />
+          On sale
         </label>
-        {!form.everywhere && (
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 p-3 space-y-2">
-            {props.locations.length === 0 && <p className="text-xs text-gray-500">No locations yet.</p>}
-            {props.locations.map((loc) => (
-              <label key={loc.id} className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={form.allowedLocationIds.includes(loc.id)} onChange={() => toggleLocation(loc.id)} />
-                {loc.name}
-                {loc.is_active === false && <span className="text-[10px] uppercase text-gray-400">inactive</span>}
-              </label>
-            ))}
+
+        {error && <Notice tone="bad" title="Not saved">{error}</Notice>}
+
+        <div className="flex gap-2">
+          <Button type="submit" disabled={loading}>{loading ? 'Saving…' : props.mode === 'edit' ? 'Save changes' : 'Create plan'}</Button>
+          <Button variant="secondary" onClick={() => router.push('/admin/plans')}>Cancel</Button>
+        </div>
+      </form>
+
+      <aside className="h-fit space-y-2 lg:sticky lg:top-6">
+        <p className="text-sm font-semibold text-muted">How customers see it</p>
+        <div className="rounded-[var(--radius-panel)] border border-line bg-surface px-4 py-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="font-semibold text-ink">{form.name || 'Plan name'}</span>
+            <span className="tnum text-lg font-bold text-ink">{form.priceNaira ? naira(Number(form.priceNaira)) : '₦—'}</span>
           </div>
-        )}
-      </fieldset>
-
-      <label className="flex items-center gap-2 text-sm text-gray-700">
-        <input type="checkbox" checked={form.isActive} onChange={(e) => set({ isActive: e.target.checked })} />
-        Available for sale
-      </label>
-
-      {error && <p className="text-sm text-red-600 font-medium" role="alert">{error}</p>}
-
-      <button type="submit" disabled={loading}
-        className="w-full rounded-lg py-2.5 text-sm font-bold text-white transition-opacity disabled:opacity-50 shadow-sm bg-[#6d1825]">
-        {loading ? 'Saving Plan...' : props.mode === 'edit' ? 'Save Changes' : 'Save Plan'}
-      </button>
-    </form>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-muted">
+            {details.map((d) => <span key={d as string}>{d}</span>)}
+          </div>
+        </div>
+        {!form.isActive && <p className="text-[13px] text-warn">Not on sale: customers will not see it.</p>}
+      </aside>
+    </div>
   );
 }

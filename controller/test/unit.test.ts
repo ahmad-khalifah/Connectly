@@ -1,0 +1,208 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { loadConfig, ConfigError } from '../src/config.ts';
+import { createLogger, redact } from '../src/log.ts';
+import { decryptRouterPassword, loadOrCreateCredentialKeys, KeyError, KEY_FILE } from '../src/keys.ts';
+import { formatRouterOsDuration, parseRouterOsDuration } from '../src/routeros.ts';
+import { profileFor } from '../src/jobs.ts';
+import { bootstrapScript } from '../src/bootstrap.ts';
+import type { GrantRow, RouterRow } from '../src/db.ts';
+
+// Same parameters as lib/network/credentials.ts encryptForController().
+const appEncrypt = (pem: string, plain: string) =>
+  crypto.publicEncrypt({ key: pem, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, Buffer.from(plain)).toString('base64');
+
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cx-keys-'));
+
+test('config: refuses a non-production controller pointed at the production database', () => {
+  assert.throws(() => loadConfig({ CONTROLLER_ENV: 'staging', DATABASE_URL: 'postgres://u:p@aws-0-eu-west-1.pooler.supabase.com/postgres?x=plydltvxfozxflarrfrx', DATABASE_CA_FILE: '/ca' }, () => 'CA'), /must not connect to the production/);
+  assert.throws(() => loadConfig({ CONTROLLER_ENV: 'local', DATABASE_URL: 'postgres://connectly_controller.plydltvxfozxflarrfrx@h/db' }), ConfigError);
+});
+
+test('config: production must use the production database; outside local the CA file is required', () => {
+  assert.throws(() => loadConfig({ CONTROLLER_ENV: 'production', DATABASE_URL: 'postgres://u@h/ssmydcwqwytcmfhotjzs', DATABASE_CA_FILE: '/ca' }, () => 'CA'), /must connect to the production/);
+  assert.throws(() => loadConfig({ CONTROLLER_ENV: 'staging', DATABASE_URL: 'postgres://u@h/ssmydcwqwytcmfhotjzs' }), /DATABASE_CA_FILE is required/);
+  const c = loadConfig({ CONTROLLER_ENV: 'staging', DATABASE_URL: 'postgres://u@h/ssmydcwqwytcmfhotjzs', DATABASE_CA_FILE: '/ca', BOOTSTRAP_LISTEN: '10.77.0.1:8080' }, () => 'CA-PEM');
+  assert.equal(c.database.caPem, 'CA-PEM');
+  assert.deepEqual(c.bootstrap, { host: '10.77.0.1', port: 8080 });
+  assert.throws(() => loadConfig({ CONTROLLER_ENV: 'test', DATABASE_URL: 'x' }), /CONTROLLER_ENV/);
+  assert.throws(() => loadConfig({ CONTROLLER_ENV: 'local', DATABASE_URL: 'x', CONTROLLER_ENDPOINT: 'no-port' }), /host:port/);
+});
+
+test('log: secret-looking fields never reach the output', () => {
+  const lines: string[] = [];
+  const log = createLogger((l) => lines.push(l));
+  log.info('x', { password: 'hunter2hunter2', nested: { credential_ciphertext: 'abc', ok: 1 }, list: [{ privateKey: 'k' }] });
+  assert.doesNotMatch(lines[0]!, /hunter2|abc"|"k"/);
+  assert.match(lines[0]!, /"ok":1/);
+  assert.deepEqual(redact({ api_password: 'x' }), { api_password: '[redacted]' });
+});
+
+test('keys: created once with owner-only permissions, reloaded with the same id', () => {
+  const dir = tmp();
+  const a = loadOrCreateCredentialKeys(dir);
+  assert.equal(a.created, true);
+  assert.equal(fs.statSync(path.join(dir, KEY_FILE)).mode & 0o777, 0o600);
+  assert.match(a.keyId, /^ck_[0-9a-f]{16}$/);
+  const b = loadOrCreateCredentialKeys(dir);
+  assert.equal(b.created, false);
+  assert.equal(b.keyId, a.keyId);
+  assert.equal((crypto.createPublicKey(a.publicPem).asymmetricKeyDetails?.modulusLength), 3072);
+});
+
+test('keys: refuses a key file others can read', () => {
+  const dir = tmp();
+  loadOrCreateCredentialKeys(dir);
+  fs.chmodSync(path.join(dir, KEY_FILE), 0o644);
+  assert.throws(() => loadOrCreateCredentialKeys(dir), /owner only/);
+});
+
+test('keys: decrypts what the app encrypts; refuses the wrong key id or a malformed password', () => {
+  const keys = loadOrCreateCredentialKeys(tmp());
+  const pw = crypto.randomBytes(24).toString('base64url');
+  assert.equal(decryptRouterPassword(keys, appEncrypt(keys.publicPem, pw), keys.keyId), pw);
+  assert.throws(() => decryptRouterPassword(keys, appEncrypt(keys.publicPem, pw), 'ck_other'), KeyError);
+  assert.throws(() => decryptRouterPassword(keys, appEncrypt(keys.publicPem, 'bad"; /system reset'), keys.keyId), /unexpected format/);
+  assert.throws(() => decryptRouterPassword(keys, 'AAAA', keys.keyId), /could not be decrypted/);
+});
+
+test('routeros: durations', () => {
+  assert.equal(parseRouterOsDuration('1w2d3h4m5s'), 604800 + 172800 + 10800 + 240 + 5);
+  assert.equal(parseRouterOsDuration(undefined), 0);
+  assert.equal(formatRouterOsDuration(7199.9), '1h59m59s');
+  assert.equal(formatRouterOsDuration(-5), '0h0m0s');
+});
+
+test('jobs: plan speeds become a RouterOS profile (upload/download from the client side)', () => {
+  const g = { speed_down_mbps: 10, speed_up_mbps: 3, device_limit: 2 } as GrantRow;
+  assert.deepEqual(profileFor(g), { name: 'cx-10M-3M-2d', rateLimit: '3M/10M', sharedUsers: 2 });
+  assert.deepEqual(profileFor({} as GrantRow), { name: 'cx-5M-2M-1d', rateLimit: '2M/5M', sharedUsers: 1 });
+});
+
+test('bootstrap script: restricted group, API only from the controller, password only in the user lines', () => {
+  const pw = 'Abc_def-123456789012345678901234';
+  const s = bootstrapScript({ identifier: 'cx-garki-01' } as RouterRow, pw, '10.77.0.1');
+  assert.match(s, /policy="read,write,api,rest-api,test"/);
+  assert.doesNotMatch(s, /policy="[^"]*(policy|sensitive|password|sniff|romon)/);
+  assert.match(s, /\[\[:parse "\/ip service set www-ssl [^"]*available-from=10\.77\.0\.1\/32"\]\] \} on-error=\{ \[\[:parse "\/ip service set www-ssl [^"]*address=10\.77\.0\.1\/32"\]\]/, 'available-from on new RouterOS, address on old, both compiled at run time');
+  assert.doesNotMatch(s, /\{ \/ip service set www-ssl/, 'no version-specific property is parsed with the whole script');
+  const addAt = s.indexOf('comment="Connectly controller API" }');
+  const moveAt = s.indexOf('/ip firewall filter move [find comment="Connectly controller API"] destination=[:pick [/ip firewall filter find where !dynamic] 0]');
+  assert.ok(addAt > 0 && moveAt > addAt, 'the API rule is moved above the default drop-from-WAN rule after it is added');
+  assert.doesNotMatch(s, /destination=0/, 'never position 0: that is the built-in FastTrack counter rule on a default firewall');
+  // RouterOS 7 needs a CA to sign the HTTPS certificate (found on CHR 7.25.1).
+  assert.match(s, /key-usage=key-cert-sign,crl-sign; \/certificate sign connectly-ca/);
+  assert.match(s, /\/certificate sign connectly-api ca=connectly-ca/);
+  assert.ok(s.indexOf('connectly-ca"') < s.indexOf('sign connectly-api'), 'CA is made before the server certificate is signed');
+  assert.match(s, /address=10\.77\.0\.1\/32 password=/);
+  const lines = s.split('\n').filter((l) => l.includes(pw));
+  assert.equal(lines.length, 1);
+  assert.match(lines[0]!, /\/user (add|set)/);
+});
+
+test('wireguard peers: only valid, non-retired WireGuard routers; file rewritten only on change', async () => {
+  const { renderPeers, writePeersFile } = await import('../src/wg-peers.ts');
+  const key = crypto.randomBytes(32).toString('base64');
+  const base = { connection_method: 'wireguard', lifecycle_status: 'active', tunnel_ip: '10.77.0.2', wg_public_key: key } as unknown as RouterRow;
+  const out = renderPeers([
+    { ...base, identifier: 'cx-b' },
+    { ...base, identifier: 'cx-retired', lifecycle_status: 'retired' } as RouterRow,
+    { ...base, identifier: 'cx-nokey', wg_public_key: null } as RouterRow,
+    { ...base, identifier: 'cx-evil', wg_public_key: 'x\nAllowedIPs = 0.0.0.0/0' } as RouterRow,
+    { ...base, identifier: 'cx-outside', tunnel_ip: '192.168.1.1' } as RouterRow,
+  ]);
+  assert.equal(out.match(/\[Peer\]/g)?.length, 1);
+  assert.match(out, new RegExp(`PublicKey = ${key.replace(/[+/]/g, '\\$&')}\\nAllowedIPs = 10\\.77\\.0\\.2/32`));
+  assert.doesNotMatch(out, /0\.0\.0\.0/);
+  const file = path.join(tmp(), 'peers.conf');
+  assert.equal(writePeersFile(file, out), true);
+  assert.equal(writePeersFile(file, out), false);
+});
+
+test('hotspot plan: pool skips network, gateway and broadcast; walled garden merged and sorted', async () => {
+  const { planHotspot } = await import('../src/hotspot.ts');
+  const p = planHotspot('cx-garki-01', { lan_interface: 'ether2', gateway_cidr: '10.10.0.1/22', dns_name: 'wifi.getconnectly.net', extra_walled_garden: ['*.paystack.co'], version: 1 },
+    { portal_url: 'https://getconnectly.net/portal', walled_garden_hosts: ['checkout.korapay.com', 'getconnectly.net'] });
+  assert.equal(p.network, '10.10.0.0/22');
+  assert.equal(p.poolRange, '10.10.0.12-10.10.3.254');
+  assert.equal(p.equipmentRange, '10.10.0.2-10.10.0.11', '10 fixed addresses kept for access points and switches');
+  assert.deepEqual(p.walledGarden, ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
+  assert.match(p.loginHtml, /url=https:\/\/getconnectly\.net\/portal\?router=cx-garki-01&mac=\$\(mac-esc\)&ip=\$\(ip\)&link=\$\(link-login-only-esc\)/);
+  // A Vercel shareable link already has a query string: the router's parameters follow with &.
+  const shared = planHotspot('cx-1', { lan_interface: 'ether2', gateway_cidr: '10.10.0.1/22', dns_name: 'wifi.getconnectly.net', extra_walled_garden: [], version: 1 },
+    { portal_url: 'https://staging.example.vercel.app/portal?_vercel_share=abc', walled_garden_hosts: [] });
+  assert.match(shared.loginHtml, /portal\?_vercel_share=abc&router=cx-1&mac=\$\(mac-esc\)/);
+  // The branded page is self-contained, and its only "$" are MikroTik's own variables.
+  assert.match(p.loginHtml, /<svg class="mark"/);
+  assert.match(p.loginHtml, /<a href="https:\/\/getconnectly\.net\/portal\?router=cx-garki-01[^"]*">Continue<\/a>/);
+  assert.doesNotMatch(p.loginHtml, /<(script|link|img)\b|src=|url\((?!['"]?data:)/, 'nothing loaded from elsewhere');
+  assert.deepEqual([...new Set(p.loginHtml.match(/\$\([^)]*\)/g))].sort(), ['$(ip)', '$(link-login-only-esc)', '$(mac-esc)']);
+  assert.equal(p.loginHtml.split('$').length - 1, p.loginHtml.match(/\$\(/g)!.length, 'no stray $');
+  assert.ok(shared.walledGarden.includes('staging.example.vercel.app'));
+  const q = planHotspot('r', { lan_interface: 'bridge1', gateway_cidr: '192.168.50.254/24', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
+    { portal_url: 'https://x.example.com/p', walled_garden_hosts: [] });
+  assert.equal(q.poolRange, '192.168.50.1-192.168.50.243', 'gateway at the top: pool below it');
+  assert.equal(q.equipmentRange, '192.168.50.244-192.168.50.253');
+  // Gateway in the middle (the CHR lab's 192.168.57.10/24): block after it, pool on both sides.
+  const mid = planHotspot('r', { lan_interface: 'ether3', gateway_cidr: '192.168.57.10/24', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
+    { portal_url: 'https://x.example/portal', walled_garden_hosts: [] });
+  assert.equal(mid.equipmentRange, '192.168.57.11-192.168.57.20');
+  assert.equal(mid.poolRange, '192.168.57.1-192.168.57.9,192.168.57.21-192.168.57.254');
+  // Small network, gateway first.
+  const small = planHotspot('r', { lan_interface: 'ether2', gateway_cidr: '10.20.0.1/28', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
+    { portal_url: 'https://x.example/portal', walled_garden_hosts: [] });
+  assert.deepEqual([small.equipmentRange, small.poolRange], ['10.20.0.2-10.20.0.3', '10.20.0.4-10.20.0.14']);
+  assert.deepEqual(q.walledGarden, ['x.example.com'], 'the payment page host is always reachable');
+});
+
+test('app tick: optional, https outside local, secret from a file of 32+ characters', () => {
+  const base = { CONTROLLER_ENV: 'local', DATABASE_URL: 'postgres://u@127.0.0.1/db' };
+  assert.equal(loadConfig(base).appTick, null);
+  const secret = 's'.repeat(40);
+  const files = (p: string) => (p === '/s' ? `${secret}\n` : p === '/short' ? 'abc' : '');
+  const ok = loadConfig({ ...base, APP_TICK_URL: 'http://localhost:3000/api/cron/sms-reminders', APP_TICK_SECRET_FILE: '/s' }, files);
+  assert.deepEqual(ok.appTick, { url: 'http://localhost:3000/api/cron/sms-reminders', secret, intervalMs: 600_000 });
+  assert.throws(() => loadConfig({ ...base, APP_TICK_URL: 'https://x.example/t' }, files), /APP_TICK_SECRET_FILE is required/);
+  assert.throws(() => loadConfig({ ...base, APP_TICK_URL: 'https://x.example/t', APP_TICK_SECRET_FILE: '/short' }, files), /at least 32/);
+  const staging = { CONTROLLER_ENV: 'staging', DATABASE_URL: 'postgres://u@db.example/db', DATABASE_CA_FILE: '/ca' };
+  assert.throws(() => loadConfig({ ...staging, APP_TICK_URL: 'http://x.example/t', APP_TICK_SECRET_FILE: '/s' }, (p) => (p === '/ca' ? 'PEM' : files(p))), /must use https/);
+});
+
+test('app tick: calls the app with the bearer secret, logs failures, never throws', async () => {
+  const { Controller } = await import('../src/worker.ts');
+  const lines: string[] = [];
+  const log = createLogger((l) => lines.push(l));
+  const calls: { url: string; auth: string | null }[] = [];
+  let reply: () => Promise<Response> = async () => new Response(JSON.stringify({ sent: 2, failed: 0 }), { status: 200 });
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    calls.push({ url, auth: new Headers(init.headers).get('authorization') });
+    return reply();
+  }) as unknown as typeof fetch;
+  const secret = 'k'.repeat(40);
+  const c = new Controller({ db: {}, log } as never, {
+    workerId: 'w', version: 't', environment: 'local', concurrency: 1, pollIntervalMs: 1000, heartbeatIntervalMs: 1000,
+    sweepIntervalMs: 1000, healthIntervalMs: 1000, reconcileIntervalMs: 1000,
+    appTick: { url: 'https://app.example/api/cron/sms-reminders', secret, intervalMs: 600_000 }, fetchFn,
+  });
+  assert.equal(await c.appTick(), 200);
+  assert.deepEqual(calls[0], { url: 'https://app.example/api/cron/sms-reminders', auth: `Bearer ${secret}` });
+  reply = async () => new Response('', { status: 401 });
+  assert.equal(await c.appTick(), 401);
+  reply = async () => { throw new Error('ENOTFOUND'); };
+  assert.equal(await c.appTick(), null);
+  assert.ok(lines.some((l) => l.includes('app_tick.failed')) && lines.some((l) => l.includes('app_tick.unreachable')));
+  assert.ok(!lines.join('').includes(secret), 'the secret never reaches the log');
+});
+
+test('BOOTSTRAP_ALLOW_DIRECT only with a private bootstrap address', () => {
+  const base = { CONTROLLER_ENV: 'local', DATABASE_URL: 'postgres://u@127.0.0.1/db' };
+  assert.equal(loadConfig(base).bootstrapAllowDirect, false);
+  assert.equal(loadConfig({ ...base, BOOTSTRAP_LISTEN: '192.168.56.1:8080', BOOTSTRAP_ALLOW_DIRECT: 'yes' }).bootstrapAllowDirect, true);
+  assert.throws(() => loadConfig({ ...base, BOOTSTRAP_LISTEN: '0.0.0.0:8080', BOOTSTRAP_ALLOW_DIRECT: 'yes' }), /private address/);
+  assert.throws(() => loadConfig({ ...base, BOOTSTRAP_LISTEN: '203.0.113.5:8080', BOOTSTRAP_ALLOW_DIRECT: 'yes' }), /private address/);
+  assert.throws(() => loadConfig({ ...base, BOOTSTRAP_ALLOW_DIRECT: 'yes' }), /private address/);
+});

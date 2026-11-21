@@ -43,7 +43,16 @@ export async function reconcilePurchase(reference: string): Promise<{ outcome: R
     });
     if (error) throw new Error(`confirm_payment failed: ${error.message}`);
     const outcome = (data as { outcome: ReconcileOutcome }).outcome;
-    if (outcome === 'paid') await sendPaymentConfirmation(purchase.id);
+    if (outcome === 'paid') {
+      // The payment and the access grant are already committed. Nothing about
+      // the SMS (Termii down, sender ID not approved, a database hiccup while
+      // recording it) may turn a confirmed payment into an error response.
+      try {
+        await sendPaymentConfirmation(purchase.id);
+      } catch (err) {
+        console.error('[SMS_CONFIRMATION_ERROR]', reference, err);
+      }
+    }
     if (outcome === 'amount_mismatch' || outcome === 'currency_mismatch') {
       console.error('[PAYMENT_MISMATCH]', reference, JSON.stringify(data));
       await logActivity('payment_mismatch', 'error', `Payment ${reference} did not match: ${outcome}`, data);
@@ -121,6 +130,10 @@ export async function sendPaymentConfirmation(purchaseId: string): Promise<void>
     .eq('id', purchaseId)
     .single();
   if (!p?.phone_number) return;
+  // The access grant is created in the same transaction as the payment (trigger
+  // trg_purchases_grant_access), so its voucher exists by now.
+  const { data: grant } = await db.from('network_authorizations').select('voucher_code').eq('purchase_id', purchaseId).maybeSingle();
+  const voucher = grant?.voucher_code ? String(grant.voucher_code) : null;
 
   const plan = (Array.isArray(p.plans) ? p.plans[0] : p.plans) as { name?: string } | null;
   const location = (Array.isArray(p.locations) ? p.locations[0] : p.locations) as { name?: string } | null;
@@ -128,8 +141,9 @@ export async function sendPaymentConfirmation(purchaseId: string): Promise<void>
     ? new Date(p.expires_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' })
     : 'n/a';
   const body =
-    `Connectly: payment of NGN ${((p.amount_kobo ?? 0) / 100).toLocaleString('en-NG')} received for ` +
+    `Connectly: NGN ${((p.amount_kobo ?? 0) / 100).toLocaleString('en-NG')} received for ` +
     `${plan?.name ?? 'your plan'}${location?.name ? ` at ${location.name}` : ''}. ` +
+    (voucher ? `Your WiFi code: ${voucher} (use it as username and password). ` : '') +
     `Valid until ${until}. Ref ${p.reference}`;
 
   const { data: claimed, error } = await db

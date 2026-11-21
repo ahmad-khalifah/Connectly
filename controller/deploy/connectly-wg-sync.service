@@ -1,0 +1,7 @@
+[Unit]
+Description=Apply Connectly router peers to WireGuard
+After=wg-quick@wg-connectly.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/connectly-wg-peers-sync

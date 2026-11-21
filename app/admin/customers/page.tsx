@@ -1,203 +1,137 @@
-import { Users, Search, CreditCard, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
+import { fetchAll } from '@/lib/db/fetch-all';
+import { PageHeader } from '@/components/admin/page-header';
+import { EmptyRow, lagos, Pager, SearchBox, TableFrame, td, th, tr } from '@/components/admin/table';
+import { Badge } from '@/components/ui/badge';
+import { Notice } from '@/components/ui/notice';
+import { requestTime } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CustomersPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ page?: string; search?: string }>;
-}) {
-  const resolvedParams = await searchParams;
-  const currentPage = Number(resolvedParams.page) || 1;
-  const searchQuery = resolvedParams.search || '';
-  const ITEMS_PER_PAGE = 20;
+const PER_PAGE = 20;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+type Row = {
+  id: string;
+  customer_id: string | null;
+  phone_number: string | null;
+  amount_paid: number | string | null;
+  amount_kobo: number | null;
+  created_at: string;
+  expires_at: string | null;
+  plans: { name: string } | { name: string }[] | null;
+  locations: { name: string } | { name: string }[] | null;
+  network_authorizations: { status: string; revoked_at: string | null }[] | { status: string; revoked_at: string | null } | null;
+};
 
-  if (!supabaseUrl || !supabaseRoleKey) {
-    return <div className="p-6 text-red-500">Critical Error: Missing Supabase Admin Keys</div>;
+const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+
+/** "0803..." and "+234 803..." both find 234803... */
+function phoneNeedle(q: string): string {
+  const d = q.replace(/\D/g, '');
+  return d.startsWith('0') ? '234' + d.slice(1) : d;
+}
+
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ page?: string; search?: string }> }) {
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const search = (sp.search ?? '').trim();
+
+  let rows: Row[] = [];
+  let failed = false;
+  try {
+    rows = await fetchAll<Row>((f, t) =>
+      db.from('purchases')
+        .select('id, customer_id, phone_number, amount_paid, amount_kobo, created_at, expires_at, plans(name), locations(name), network_authorizations(status, revoked_at)')
+        .eq('status', 'paid')
+        .order('created_at', { ascending: false })
+        .range(f, t)
+    );
+  } catch (e) {
+    console.error('[CUSTOMERS_FETCH_ERROR]', e);
+    failed = true;
   }
 
-  const supabase = db;
-
-  // Fetch successful purchases to derive customer states
-  const { data: purchases, error } = await supabase
-    .from('purchases')
-    .select(`
-      id,
-      customer_id,
-      phone_number,
-      amount_paid,
-      net_amount_ngn,
-      created_at,
-      expires_at,
-      plans(name, duration_seconds),
-      locations(name)
-    `)
-    .eq('status', 'paid')
-    .order('created_at', { ascending: false });
-
-  if (error) console.error('[PURCHASES_FETCH_ERROR]', error);
-
-  // Group by phone number via JavaScript, keeping only the most recent transaction
-  const customerMap = new Map();
-  
-  purchases?.forEach((p) => {
-    const phone = p.phone_number || 'Unknown';
-    const spent = Number(p.amount_paid || p.net_amount_ngn || 0);
-
-    if (customerMap.has(phone)) {
-      const existing = customerMap.get(phone);
-      existing.purchaseCount += 1;
-      existing.totalSpent += spent;
-      existing.customerId = existing.customerId || p.customer_id;
-    } else {
-      // Safely extract relational data handling Supabase array/object type returns
-      const plan = Array.isArray(p.plans) ? p.plans[0] : p.plans;
-      const location = Array.isArray(p.locations) ? p.locations[0] : p.locations;
-      
-      const expiryDate = p.expires_at ? new Date(p.expires_at) : null;
-      const isOnline = !!expiryDate && expiryDate > new Date();
-
-      customerMap.set(phone, {
-        id: p.id,
-        customerId: p.customer_id as string | null,
-        purchaseCount: 1,
-        totalSpent: spent,
-        phone: phone,
-        joined: p.created_at,
-        planName: plan?.name || 'Unknown Plan',
-        isOnline: isOnline,
-        currentLocation: location?.name || 'Remote',
-        expiry: expiryDate ? expiryDate.toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : '—'
-      });
+  // One row per phone number; the newest purchase decides the current plan.
+  const now = requestTime();
+  const byPhone = new Map<string, { key: string; customerId: string | null; phone: string; count: number; spent: number; plan: string; location: string; ends: string | null; running: boolean }>();
+  for (const p of rows) {
+    const phone = p.phone_number ?? 'Unknown';
+    const spent = p.amount_paid !== null && p.amount_paid !== undefined ? Number(p.amount_paid) : (p.amount_kobo ?? 0) / 100;
+    const existing = byPhone.get(phone);
+    if (existing) {
+      existing.count += 1;
+      existing.spent += spent;
+      existing.customerId ||= p.customer_id;
+      continue;
     }
-  });
-
-  let formattedCustomers = Array.from(customerMap.values());
-
-  if (searchQuery) {
-    formattedCustomers = formattedCustomers.filter(c => c.phone.includes(searchQuery));
+    const grants = (Array.isArray(p.network_authorizations) ? p.network_authorizations : p.network_authorizations ? [p.network_authorizations] : []);
+    // Access revoked early counts as ended, whatever the paid end time says.
+    const revoked = grants.length > 0 && grants.every((g) => g.revoked_at || g.status === 'revoked');
+    byPhone.set(phone, {
+      key: p.id,
+      customerId: p.customer_id,
+      phone,
+      count: 1,
+      spent,
+      plan: one(p.plans)?.name ?? 'Unknown plan',
+      location: one(p.locations)?.name ?? '—',
+      ends: p.expires_at,
+      running: Boolean(p.expires_at && Date.parse(p.expires_at) > now && !revoked),
+    });
   }
 
-  // Handle in-memory pagination after grouping
-  const count = formattedCustomers.length;
-  const totalPages = count ? Math.ceil(count / ITEMS_PER_PAGE) : 1;
-  const from = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedCustomers = formattedCustomers.slice(from, from + ITEMS_PER_PAGE);
+  let customers = [...byPhone.values()];
+  if (search) {
+    const needle = phoneNeedle(search);
+    customers = customers.filter((c) => (needle ? c.phone.includes(needle) : c.phone.includes(search)));
+  }
+  const total = customers.length;
+  const pages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const shown = customers.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const href = (n: number) => `?${new URLSearchParams({ page: String(n), ...(search ? { search } : {}) }).toString()}`;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Users className="h-6 w-6 text-[#6d1825]" /> Customers 360
-          </h1>
-          <p className="text-sm text-slate-500">Manage roaming subscribers, active sessions, and access plans.</p>
-        </div>
-        
-        <form className="w-full md:w-auto flex items-center gap-2">
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input 
-              type="text"
-              name="search"
-              placeholder="Search phone number..."
-              defaultValue={searchQuery}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#6d1825] focus:border-[#6d1825] outline-none"
-            />
-          </div>
-          <button type="submit" className="px-4 py-2 bg-[#6d1825] text-white text-sm font-semibold rounded-lg hover:bg-[#5a141e] transition-colors">
-            Search
-          </button>
-        </form>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto shadow-xs">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-900 text-xs uppercase tracking-wider font-semibold">
-            <tr>
-              <th className="px-6 py-4">Subscriber</th>
-              <th className="px-6 py-4">Active Plan</th>
-              <th className="px-6 py-4">Access</th>
-              <th className="px-6 py-4">Purchases</th>
-              <th className="px-6 py-4">Location</th>
-              <th className="px-6 py-4">Valid Until</th>
-              <th className="px-6 py-4 text-right">Actions</th>
+      <PageHeader
+        title="Customers"
+        description="Everyone who has paid, by phone number. Status and plan come from their latest purchase."
+        actions={<SearchBox defaultValue={search} placeholder="Search by phone number" />}
+      />
+      {failed && <Notice tone="bad" title="Customers could not be loaded">The database did not answer. Refresh to try again.</Notice>}
+      <TableFrame footer={<Pager page={page} pages={pages} total={total} noun="customer" href={href} />}>
+        <thead>
+          <tr>
+            <th className={th}>Phone number</th>
+            <th className={th}>Latest plan</th>
+            <th className={th}>Status</th>
+            <th className={th}>Ends</th>
+            <th className={th}>Location</th>
+            <th className={`${th} text-right`}>Purchases</th>
+            <th className={`${th} text-right`}>Total paid</th>
+            <th className={th}><span className="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((c) => (
+            <tr key={c.key} className={tr}>
+              <td className={`${td} tnum font-semibold text-ink`}>+{c.phone}</td>
+              <td className={td}>{c.plan}</td>
+              <td className={td}>{c.running ? <Badge tone="ok">Plan running</Badge> : <Badge>Ended</Badge>}</td>
+              <td className={`${td} tnum whitespace-nowrap text-muted`}>{lagos(c.ends)}</td>
+              <td className={`${td} text-muted`}>{c.location}</td>
+              <td className={`${td} tnum text-right`}>{c.count}</td>
+              <td className={`${td} tnum text-right`}>₦{c.spent.toLocaleString('en-NG')}</td>
+              <td className={`${td} text-right`}>
+                {c.customerId ? (
+                  <Link href={`/admin/customers/${c.customerId}`} className="font-semibold text-brand hover:underline">History</Link>
+                ) : <span className="text-subtle">No profile</span>}
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {paginatedCustomers.map((customer) => (
-              <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 font-mono font-bold text-slate-900">{customer.phone}</td>
-                <td className="px-6 py-4">
-                  <span className="flex items-center gap-1.5">
-                    <CreditCard className="h-3.5 w-3.5 text-slate-400" />
-                    {customer.planName}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  {customer.isOnline ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                      Expired
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-xs whitespace-nowrap">
-                  {customer.purchaseCount} · ₦{customer.totalSpent.toLocaleString('en-NG')}
-                </td>
-                <td className="px-6 py-4 text-slate-500 text-xs font-medium">{customer.currentLocation}</td>
-                <td className="px-6 py-4 text-xs font-mono">{customer.expiry}</td>
-                <td className="px-6 py-4 text-right">
-                  {customer.customerId ? (
-                    <Link href={`/admin/customers/${customer.customerId}`} className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-[#6d1825]">
-                      History <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  ) : (
-                    <span className="text-[11px] text-slate-400">No profile</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {paginatedCustomers.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                  No customers found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50">
-            <Link 
-              href={`?page=${currentPage - 1}${searchQuery ? `&search=${searchQuery}` : ''}`}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition-colors ${
-                currentPage <= 1 ? 'pointer-events-none text-slate-400 border-slate-200 bg-slate-100' : 'text-slate-700 border-slate-300 bg-white hover:bg-slate-50'
-              }`}
-            >
-              Prev
-            </Link>
-            <span className="text-xs font-bold text-slate-500">Page {currentPage} of {totalPages}</span>
-            <Link 
-              href={`?page=${currentPage + 1}${searchQuery ? `&search=${searchQuery}` : ''}`}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg border transition-colors ${
-                currentPage >= totalPages ? 'pointer-events-none text-slate-400 border-slate-200 bg-slate-100' : 'text-slate-700 border-slate-300 bg-white hover:bg-slate-50'
-              }`}
-            >
-              Next
-            </Link>
-          </div>
-        )}
-      </div>
+          ))}
+          {shown.length === 0 && <EmptyRow cols={8}>{search ? `No customer matches "${search}".` : 'No paying customers yet.'}</EmptyRow>}
+        </tbody>
+      </TableFrame>
     </div>
   );
 }

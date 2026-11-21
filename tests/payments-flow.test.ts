@@ -38,8 +38,18 @@ describe('reconcilePurchase', () => {
     }
     if (op.table === 'notifications' && op.action === 'insert') return { data: { id: 'n1' }, error: null };
     if (op.table === 'notifications' && op.action === 'select') return { data: { attempts: 0 }, error: null };
+    if (op.table === 'network_authorizations') return { data: { voucher_code: 'K7M2Q9XP' }, error: null };
     return { data: null, error: null };
   };
+
+  it('puts the WiFi code in the confirmation SMS', async () => {
+    fake = createFakeDb(purchaseRow('pending'), (fn) => ({ data: { outcome: fn === 'confirm_payment' ? 'paid' : 'x' }, error: null }));
+    verifyCharge.mockResolvedValue({ reference: REF, status: 'success', amountPaidKobo: 25000, feeKobo: 375, currency: 'NGN', providerReference: 'KPY-1' });
+    const { reconcilePurchase } = await import('@/lib/payments/ledger');
+    await reconcilePurchase(REF);
+    expect(sendTermiiSMS.mock.calls[0][1]).toMatch(/Your WiFi code: K7M2Q9XP/);
+    expect((sendTermiiSMS.mock.calls[0][1] as string).length).toBeLessThanOrEqual(306); // two SMS parts at most
+  });
 
   it('confirms a verified success with kobo amounts and sends one SMS', async () => {
     fake = createFakeDb(purchaseRow('pending'), (fn) => ({ data: { outcome: fn === 'confirm_payment' ? 'paid' : 'x' }, error: null }));
@@ -96,6 +106,26 @@ describe('reconcilePurchase', () => {
     const update = fake.ops.find((o) => o.table === 'notifications' && o.action === 'update');
     expect(update?.values).toMatchObject({ status: 'failed', last_error: 'Termii 400' });
     expect(fake.ops.some((o) => o.table === 'purchases' && o.action === 'update')).toBe(false);
+  });
+  it('still reports paid when recording the SMS throws (payment and access are never blocked by SMS)', async () => {
+    fake = createFakeDb(purchaseRow('pending'), () => ({ data: { outcome: 'paid' }, error: null }));
+    verifyCharge.mockResolvedValue({ reference: REF, status: 'success', amountPaidKobo: 25000, feeKobo: 0, currency: 'NGN', providerReference: null });
+    sendTermiiSMS.mockRejectedValue(new Error('socket hang up'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { reconcilePurchase } = await import('@/lib/payments/ledger');
+    expect((await reconcilePurchase(REF)).outcome).toBe('paid');
+    expect(spy.mock.calls.some((c) => c[0] === '[SMS_CONFIRMATION_ERROR]')).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('reports paid when Termii is not configured yet (sender ID pending approval)', async () => {
+    fake = createFakeDb(purchaseRow('pending'), () => ({ data: { outcome: 'paid' }, error: null }));
+    verifyCharge.mockResolvedValue({ reference: REF, status: 'success', amountPaidKobo: 25000, feeKobo: 0, currency: 'NGN', providerReference: null });
+    sendTermiiSMS.mockResolvedValue({ ok: false, error: 'Termii is not configured (TERMII_API_KEY / TERMII_SENDER_ID)' });
+    const { reconcilePurchase } = await import('@/lib/payments/ledger');
+    expect((await reconcilePurchase(REF)).outcome).toBe('paid');
+    const update = fake.ops.find((o) => o.table === 'notifications' && o.action === 'update');
+    expect(update?.values).toMatchObject({ status: 'failed' });
   });
 });
 
@@ -220,10 +250,17 @@ describe('initializeKoraCheckout', () => {
     }
   });
 
+  it('refuses a purchase with no router, since it could never become access', async () => {
+    fake = createFakeDb(world());
+    expect(await call({})).toEqual({ ok: false, error: 'Please connect to the Connectly WiFi network to buy a plan.' });
+    expect(fake.ops.some((o) => o.table === 'purchases')).toBe(false);
+    expect(initializeCharge).not.toHaveBeenCalled();
+  });
+
   it('marks the purchase failed if Korapay cannot start the checkout', async () => {
     fake = createFakeDb(world());
     initializeCharge.mockRejectedValue(new Error('Korapay down'));
-    const res = await call({});
+    const res = await call({ routerId: ROUTER });
     expect(res).toEqual({ ok: false, error: 'Unable to start payment. Please try again.' });
     expect(fake.rpcCalls[0]).toMatchObject({ fn: 'mark_payment_failed' });
   });
@@ -277,5 +314,74 @@ describe('reconcileRecentPending (admin pages settle missed webhooks)', () => {
     fake = createFakeDb(() => ({ data: null, error: { message: 'db down' } }));
     const { reconcileRecentPending } = await import('@/lib/payments/ledger');
     expect(await reconcileRecentPending()).toEqual({ checked: 0, confirmed: 0, failed: 0, errors: 1 });
+  });
+});
+
+// ---------------------------------------------------------------- customer return page
+describe('GET /api/purchase/status (what the customer sees after paying)', () => {
+  const REF2 = 'CONN_11111111-2222-4333-8444-555555555555';
+  const get = async () => {
+    const { GET } = await import('@/app/api/purchase/status/route');
+    return (await GET(new Request(`http://x/api/purchase/status?reference=${REF2}`))).json();
+  };
+  const world = (grant: object | null, purchaseStatus = 'paid', dns: string | null = 'wifi.garki.example', autoLogin: string | null = null, sms: string | null = 'failed'): Handler => (op) => {
+    if (op.table === 'controller_jobs') return { data: autoLogin ? { result: { auto_login: { status: autoLogin } } } : null, error: null };
+    if (op.table === 'notifications') return { data: sms ? { status: sms } : null, error: null };
+    if (op.table === 'purchases') return { data: { id: 'p1', router_id: ROUTER, status: purchaseStatus, created_at: new Date().toISOString(), expires_at: '2026-11-18T10:00:00Z', amount_kobo: 25000, plans: { name: 'Day' }, locations: { name: 'Garki' } }, error: null };
+    if (op.table === 'network_authorizations') return { data: grant, error: null };
+    if (op.table === 'router_hotspot_settings') return { data: dns ? { dns_name: dns } : null, error: null };
+    return { data: null, error: null };
+  };
+
+  it('gives the voucher and a login link to the router\'s own hotspot page once it is on the router', async () => {
+    fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'active', purchases: { plans: { device_limit: 2 } } }));
+    const body = await get();
+    expect(body.access).toEqual({
+      voucher: 'K7M2Q9XP', ready: true, ended: false, devices: 2, online: false, sms: 'failed',
+      connectUrl: 'http://wifi.garki.example/login?username=K7M2Q9XP&password=K7M2Q9XP&dst=https%3A%2F%2Fgetconnectly.net',
+    });
+  });
+  it('says the paying device is online when the controller logged it in', async () => {
+    fake = createFakeDb(world({ id: 'g1', voucher_code: 'K7M2Q9XP', status: 'active', purchases: null }, 'paid', null, 'logged_in', 'sent'));
+    expect((await get()).access).toMatchObject({ online: true, sms: 'sent' });
+  });
+  it('says "not ready" while the controller has not added it yet', async () => {
+    fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'pending_device', purchases: null }));
+    expect((await get()).access).toMatchObject({ ready: false, ended: false, devices: 1 });
+  });
+  it('falls back to the default hotspot name when none is saved', async () => {
+    fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'active', purchases: null }, 'paid', null));
+    expect((await get()).access.connectUrl).toMatch(/^http:\/\/wifi\.getconnectly\.net\/login\?/);
+  });
+  it('offers a way back to the plans on the same WiFi after a failed payment, never after a paid one', async () => {
+    const withRouter = (status: string, mac: string): Handler => (op) =>
+      op.table === 'purchases'
+        ? { data: { id: 'p1', router_id: ROUTER, status, created_at: new Date().toISOString(), expires_at: null, amount_kobo: 25000, mac_address: mac, plans: { name: 'Day' }, locations: { name: 'Garki' }, routers: { identifier: 'cx-garki-01' } }, error: null }
+        : { data: null, error: null };
+    fake = createFakeDb(withRouter('failed', 'AA:BB:CC:DD:EE:FF'));
+    expect((await get()).retryPath).toBe('/portal?router=cx-garki-01&mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF');
+    fake = createFakeDb(withRouter('failed', '00:00:00:00:00:00'));
+    expect((await get()).retryPath).toBeNull();
+    fake = createFakeDb(withRouter('paid', 'AA:BB:CC:DD:EE:FF'));
+    expect((await get()).retryPath).toBeNull();
+  });
+  it('reveals no voucher before the payment is confirmed', async () => {
+    fake = createFakeDb(world({ voucher_code: 'K7M2Q9XP', status: 'active', purchases: null }, 'pending'));
+    const body = await get();
+    expect(body.access).toBeNull();
+    expect(fake.ops.some((o) => o.table === 'network_authorizations')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------- return page
+describe('success page', () => {
+  it('finds our reference when Korapay adds its own reference to the return address', async () => {
+    const { default: SuccessPage } = await import('@/app/success/page');
+    const ours = 'CONN_97c9db0f-7c51-47b0-abe8-4113b33c4bf2';
+    const el = await SuccessPage({ searchParams: Promise.resolve({ reference: [ours, 'KPY-CK-abc123'] }) });
+    expect(JSON.stringify(el)).toContain(ours);
+    expect(JSON.stringify(el)).not.toContain('No payment reference');
+    const none = await SuccessPage({ searchParams: Promise.resolve({ reference: ['KPY-CK-abc123'] }) });
+    expect(JSON.stringify(none)).toContain('No payment reference');
   });
 });

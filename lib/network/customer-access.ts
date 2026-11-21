@@ -1,0 +1,65 @@
+import { db } from '@/lib/db/client';
+import { HOTSPOT_DEFAULTS } from './hotspot';
+import { codeLoginHref } from './code-login';
+
+// What a paying customer needs to get online: their voucher, whether the
+// controller has put it on the router yet, and the router's own login page.
+// The customer's browser logs in by opening the router's login URL; the app
+// never talks to the router (the controller does).
+
+export type CustomerAccess = {
+  voucher: string;
+  /** true once the controller has added the voucher to the router. */
+  ready: boolean;
+  ended: boolean;
+  devices: number;
+  loginUrl: string;
+  /** The controller logged the paying device in by itself (no login page needed). */
+  online: boolean;
+};
+
+/** The hotspot's login page as customers' devices see it, e.g. http://wifi.getconnectly.net/login. */
+export async function hotspotLoginUrl(routerId: string): Promise<string> {
+  let dns: string = HOTSPOT_DEFAULTS.dns_name;
+  // The table arrives with migration 20261119090000; until then the default name is used.
+  const { data, error } = await db.from('router_hotspot_settings').select('dns_name').eq('router_id', routerId).maybeSingle();
+  if (!error && data?.dns_name) dns = String(data.dns_name);
+  return `http://${dns}/login`;
+}
+
+/** Link that logs a device in with its voucher (see code-login.ts). */
+export function connectLink(loginUrl: string, voucher: string, dst = 'https://getconnectly.net'): string {
+  return codeLoginHref(loginUrl, voucher, dst);
+}
+
+export async function accessForPurchase(purchaseId: string, routerId: string | null): Promise<CustomerAccess | null> {
+  if (!routerId) return null;
+  const { data: grant } = await db
+    .from('network_authorizations')
+    .select('id, voucher_code, status, purchases(plans(device_limit))')
+    .eq('purchase_id', purchaseId)
+    .eq('router_id', routerId)
+    .maybeSingle();
+  if (!grant?.voucher_code) return null;
+  const purchase = (Array.isArray(grant.purchases) ? grant.purchases[0] : grant.purchases) as { plans?: unknown } | null;
+  const plan = (Array.isArray(purchase?.plans) ? purchase.plans[0] : purchase?.plans) as { device_limit?: number | null } | null;
+  // The provisioning job reports whether it logged the paying device in (controller: logInPayingDevice).
+  const { data: job } = await db
+    .from('controller_jobs')
+    .select('result')
+    .eq('authorization_id', grant.id)
+    .eq('kind', 'access.provision')
+    .eq('status', 'succeeded')
+    .order('finished_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const login = (job?.result as { auto_login?: { status?: string } } | null)?.auto_login?.status;
+  return {
+    online: login === 'logged_in' || login === 'already_online',
+    voucher: String(grant.voucher_code),
+    ready: grant.status === 'active',
+    ended: grant.status === 'revoked' || grant.status === 'expired',
+    devices: Math.max(1, Number(plan?.device_limit ?? 1)),
+    loginUrl: await hotspotLoginUrl(routerId),
+  };
+}

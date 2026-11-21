@@ -5,7 +5,8 @@
 // garden) from the controller through that encrypted tunnel. The controller
 // answers only the tunnel address assigned to this router.
 //
-// STATUS: untested on RouterOS until the virtual MikroTik (CHR) phase.
+// STATUS: run on MikroTik CHR 7.25.1 in the lab (17 Nov 2026); re-runs made safe
+// after the lab showed a second run failing on the existing peer.
 
 export type SetupInputs = {
   router: { id: string; name: string; identifier: string; connection_method: string; tunnel_ip: string | null; wg_public_key: string | null };
@@ -44,10 +45,9 @@ export function buildSetupScript({ router, settings }: SetupInputs): SetupScript
     '',
     `# 2. Tunnel to the Connectly controller. The ${WG_INTERFACE} interface was`,
     '#    created before registration, to read its public key.',
-    `/interface wireguard peers add interface=${WG_INTERFACE} public-key="${ros(settings.controller_wg_public_key ?? '<controller-public-key>')}" \\`,
-    `    endpoint-address=${host} endpoint-port=${port ?? '<port>'} allowed-address=${controllerIp}/32 \\`,
-    '    persistent-keepalive=25s comment="Connectly controller"',
-    `/ip address add address=${router.tunnel_ip ?? '<tunnel-ip>'}/${prefix} interface=${WG_INTERFACE} comment="Connectly tunnel"`,
+    '#    Safe to run again: an existing Connectly peer and address are updated.',
+    `:if ([:len [/interface wireguard peers find comment="Connectly controller"]] = 0) do={ /interface wireguard peers add interface=${WG_INTERFACE} public-key="${ros(settings.controller_wg_public_key ?? '<controller-public-key>')}" endpoint-address=${host} endpoint-port=${port ?? '<port>'} allowed-address=${controllerIp}/32 persistent-keepalive=25s comment="Connectly controller" } else={ /interface wireguard peers set [find comment="Connectly controller"] interface=${WG_INTERFACE} public-key="${ros(settings.controller_wg_public_key ?? '<controller-public-key>')}" endpoint-address=${host} endpoint-port=${port ?? '<port>'} allowed-address=${controllerIp}/32 persistent-keepalive=25s }`,
+    `:if ([:len [/ip address find comment="Connectly tunnel"]] = 0) do={ /ip address add address=${router.tunnel_ip ?? '<tunnel-ip>'}/${prefix} interface=${WG_INTERFACE} comment="Connectly tunnel" } else={ /ip address set [find comment="Connectly tunnel"] address=${router.tunnel_ip ?? '<tunnel-ip>'}/${prefix} interface=${WG_INTERFACE} }`,
     '',
     '# 3. Fetch and apply the rest of the configuration from the controller',
     '#    (API user and password, certificate, firewall, hotspot, walled garden).',
@@ -65,3 +65,22 @@ export const PRE_REGISTRATION_STEPS = [
   `/interface wireguard add name=${WG_INTERFACE} listen-port=13231 comment="Connectly controller"`,
   `/interface wireguard print where name=${WG_INTERFACE}`,
 ].join('\n');
+
+/**
+ * Set-up lines for a direct (non-WireGuard) router on a private management
+ * network. The router collects its API credential from the controller's
+ * bootstrap endpoint, which serves direct routers only when the controller
+ * runs with BOOTSTRAP_ALLOW_DIRECT=yes on a private address, and only to the
+ * router's registered management address. Contains no password.
+ */
+export const CONTROLLER_ADDRESS_PLACEHOLDER = 'CONTROLLER-ADDRESS';
+
+export function buildDirectSetupLines(router: { id: string; identifier: string }, controllerAddress = CONTROLLER_ADDRESS_PLACEHOLDER): string {
+  const ros = (s: string) => s.replace(/[\\"$]/g, (c) => `\\${c}`);
+  return [
+    `/system identity set name="${ros(router.identifier)}"`,
+    `/tool fetch url="http://${controllerAddress}:8080/bootstrap/${router.id}" dst-path=cx.rsc`,
+    '/import cx.rsc',
+    '/file remove cx.rsc',
+  ].join('\n');
+}
