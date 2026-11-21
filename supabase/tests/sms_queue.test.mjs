@@ -142,3 +142,29 @@ test('rollback restores the exact schema before this migration', async () => {
   await db.exec(fs.readFileSync(path.resolve(import.meta.dirname, '../rollbacks/20261121120000_sms_queue.rollback.sql'), 'utf8'));
   assert.equal(await fingerprint(db), before);
 });
+
+test('"ends soon" is scaled to the plan: never right after buying a short plan', async () => {
+  const db = await freshDb();
+  const r = await router(db);
+  // 15-minute plan bought 1 minute ago: 14 minutes left, more than a quarter.
+  const short = await paid(db, r, { paidAt: at(-1), expiresAt: at(14), phone: '2348030000030' });
+  // 1-hour plan, 20 minutes left: more than 15.
+  const hour = await paid(db, r, { paidAt: at(-40), expiresAt: at(20), phone: '2348030000031' });
+  // A plan of a day or more, 50 minutes left: within the hour.
+  const day = await paid(db, r, { paidAt: at(-1450), expiresAt: at(50), phone: '2348030000032' });
+  await db.query(`insert into notifications (purchase_id, recipient, template, body, status)
+                  select id, phone_number, 'payment_confirmed', 'x', 'sent' from purchases where id = any($1::uuid[])`, [[short.id, hour.id]]);
+  assert.deepEqual((await claim(db)).map((x) => [x.purchase_id, x.template]), [[day.id, 'expiry_soon']]);
+  // Later, inside each plan's own window.
+  assert.deepEqual((await claim(db, 10, at(6))).map((x) => [x.purchase_id, x.template]), [[hour.id, 'expiry_soon']]); // 14 of 60 left
+  assert.deepEqual((await claim(db, 10, at(11))).map((x) => [x.purchase_id, x.template]), [[short.id, 'expiry_soon']]); // 3 of 15 left
+});
+
+test('short-plan rollback puts back the first version exactly', async () => {
+  const before = await freshDb({ upTo: MIG });
+  const db = await freshDb({ upTo: '20261121130000_sms_short_plans.sql' });
+  await db.exec(fs.readFileSync(path.resolve(import.meta.dirname, '../rollbacks/20261121130000_sms_short_plans.rollback.sql'), 'utf8'));
+  const src = async (d) => (await d.query(`select pg_get_functiondef('public.claim_due_sms(timestamptz, integer)'::regprocedure) s`)).rows[0].s;
+  assert.equal(await src(db), await src(before));
+  assert.equal(await fingerprint(db), await fingerprint(before));
+});
