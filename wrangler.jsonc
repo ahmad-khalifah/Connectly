@@ -1,0 +1,44 @@
+// Cloudflare Workers configuration for the website, portal and admin.
+// Free plan only: no R2, KV, Images or other paid bindings. See docs/cloudflare.md.
+// Secrets (Supabase service key, Korapay keys, Termii) are set with
+// `wrangler secret put`, never in this file.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "connectly-web",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      // Self-reference used by OpenNext's caching; must match "name".
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "connectly-web"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  // A Worker deployed from this file is a staging (preview) deployment unless
+  // the production environment below is chosen explicitly.
+  "vars": {
+    "APP_ENV": "preview"
+  },
+  "env": {
+    "production": {
+      "name": "connectly-web-production",
+      "services": [
+        {
+          "binding": "WORKER_SELF_REFERENCE",
+          "service": "connectly-web-production"
+        }
+      ],
+      "vars": {
+        "APP_ENV": "production"
+      }
+    }
+  }
+}

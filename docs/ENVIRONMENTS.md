@@ -49,3 +49,9 @@ Never paste keys into chat, issues or commits. Rotate any key that was.
 ## Korapay webhooks on previews
 
 Vercel may protect preview URLs with a login, which blocks Korapay's webhook. The customer return page re-checks each payment with Korapay's verify API, so payments still complete. To test real webhook delivery on a preview, enable Vercel's *Protection Bypass for Automation* for the project and include its token in the notification URL. That step is configured when staging is set up.
+
+## Cloudflare Workers (prepared, not live)
+
+The app can also be built for Cloudflare Workers' free plan. There, `APP_ENV`
+(`preview` or `production`) replaces Vercel's `VERCEL_ENV`, and the same guards
+apply. See `docs/cloudflare.md`.

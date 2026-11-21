@@ -1,6 +1,8 @@
 // Which environment we are running in, and guards that keep staging and
-// production apart. Vercel sets VERCEL_ENV to "production" or "preview";
-// anything else (local dev, tests) counts as "development".
+// production apart. APP_ENV ("production" or "preview") is set explicitly on
+// hosts that do not set it for us (Cloudflare Workers); on Vercel, VERCEL_ENV
+// is used when APP_ENV is absent. Anything else (local dev, tests, a typo)
+// counts as "development", the most restrictive setting.
 //
 // Rules enforced at the first database call (see lib/db/client.ts):
 //   * Non-production code must never use the production Supabase project.
@@ -16,7 +18,7 @@ export const PRODUCTION_SUPABASE_REF = 'plydltvxfozxflarrfrx';
 export class EnvironmentError extends Error {}
 
 export function appEnv(): AppEnv {
-  const v = process.env.VERCEL_ENV;
+  const v = process.env.APP_ENV ?? process.env.VERCEL_ENV;
   return v === 'production' || v === 'preview' ? v : 'development';
 }
 
