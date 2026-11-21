@@ -13,7 +13,7 @@ export function SiteFooter() {
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted">
             Connectly Networks designs, installs and runs paid WiFi for markets, campuses, hostels and estates. A Connectly Technologies Ltd business.
           </p>
-          <p className="mt-4 text-[13px] leading-relaxed text-subtle">RC 9843504<br />Abuja, Nigeria</p>
+          <p className="mt-4 text-[13px] leading-relaxed text-subtle">RC 9843504<br />36 Ebitu Ukiwe Street, Jabi<br />Abuja, Nigeria</p>
         </div>
         <div>
           <h2 className="text-sm font-semibold text-ink">What we do</h2>
