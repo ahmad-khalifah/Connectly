@@ -411,6 +411,14 @@ describe('controller against a local copy of the database', { skip }, () => {
     }
     assert.equal(fw.length, 13);
     assert.deepEqual(m('/ip/hotspot/walled-garden').map((w) => w['dst-host']).sort(), ['*.paystack.co', 'checkout.korapay.com', 'getconnectly.net']);
+    // HTTPS: resolvable hosts go in an address list the IP walled garden accepts; wildcards stay HTTP-only.
+    assert.deepEqual(m('/ip/firewall/address-list').filter((a) => a.list === 'connectly-walled-garden').map((a) => a.address).sort(), ['checkout.korapay.com', 'getconnectly.net']);
+    assert.deepEqual(m('/ip/hotspot/walled-garden/ip').map((w) => [w['dst-address-list'], w.action]), [['connectly-walled-garden', 'accept']]);
+    for (const proto of ['udp', 'tcp']) {
+      const n = m('/ip/firewall/nat').find((x) => x.comment === `connectly-hotspot-dns-redirect-${proto}`)!;
+      assert.deepEqual([n.chain, n['src-address'], n['dst-address'], n.protocol, n['dst-port'], n.action, n['to-ports']],
+        ['dstnat', '10.10.0.0/22', '!10.10.0.1', proto, '53', 'redirect', '53'], 'customer DNS always goes to the router');
+    }
     assert.match(m('/file')[0]!.contents!, /url=https:\/\/getconnectly\.net\/portal\?router=cx-hs-01/);
     let s = (await t.admin.query('select version, applied_version, applied_at from router_hotspot_settings where router_id = $1', [r.id])).rows[0];
     assert.deepEqual([s.version, s.applied_version], [1, 1]);
@@ -440,6 +448,8 @@ describe('controller against a local copy of the database', { skip }, () => {
     const res3 = (await job(id3)).result;
     assert.ok(res3.updated.includes('hotspot profile'));
     assert.ok(res3.removed.includes('walled garden *.paystack.co'));
+    assert.ok(res3.unchanged.includes('HTTPS allow list checkout.korapay.com'));
+    assert.equal(m('/ip/hotspot/walled-garden/ip').length, 1, 'still one IP walled-garden entry');
     assert.equal((await t.admin.query('select applied_version from router_hotspot_settings where router_id = $1', [r.id])).rows[0].applied_version, 2);
     assert.equal(m('/ip/hotspot').length, 1, 'still one hotspot server');
   });

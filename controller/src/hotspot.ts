@@ -48,6 +48,8 @@ export const TAG = 'connectly-hotspot';
 export const NAME = 'connectly';
 export const POOL = 'connectly-hotspot';
 const WG_TAG = 'connectly';
+/** Address list holding the walled-garden host names, for HTTPS. */
+export const WG_LIST = 'connectly-walled-garden';
 /** Private ranges customers may not reach (RFC 1918). */
 export const PRIVATE_RANGES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] as const;
 
@@ -252,6 +254,44 @@ export async function applyHotspot(c: RouterClient, plan: HotspotPlan): Promise<
   for (const [host, w] of have) {
     await c.remove('/ip/hotspot/walled-garden', w['.id']!);
     r.removed.push(`walled garden ${host}`);
+  }
+
+  // HTTPS. The walled garden above lets unpaid phones open those hosts over
+  // plain HTTP only; the portal and the checkout are HTTPS, which the hotspot
+  // allows by address. RouterOS resolves a host name placed in an address
+  // list and keeps its addresses current, so the IP walled garden accepts
+  // that list. (A host name directly in the IP walled garden is "invalid" on
+  // the L009.) Wildcards cannot be resolved and stay HTTP-only. Customer DNS is
+  // redirected to the router (below), so phones get the same addresses as the
+  // list. Found on the physical L009, 20-21 Nov 2026: a phone that kept an
+  // address it had looked up over mobile data was refused.
+  const owned = (await c.list('/ip/firewall/address-list', { list: WG_LIST })).filter((a) => a.dynamic !== 'true' && a.comment === TAG);
+  const listed = new Map(owned.map((a) => [a.address, a]));
+  for (const host of plan.walledGarden) {
+    if (host.startsWith('*.')) {
+      r.unchanged.push(`HTTPS allow list: ${host} skipped (a wildcard cannot be looked up; HTTP only)`);
+      continue;
+    }
+    if (listed.has(host)) {
+      r.unchanged.push(`HTTPS allow list ${host}`);
+      listed.delete(host);
+    } else {
+      await c.add('/ip/firewall/address-list', { list: WG_LIST, address: host, comment: TAG });
+      r.created.push(`HTTPS allow list ${host}`);
+    }
+  }
+  for (const [host, a] of listed) {
+    await c.remove('/ip/firewall/address-list', a['.id']!);
+    r.removed.push(`HTTPS allow list ${host}`);
+  }
+  await ensure(c, r, 'HTTPS walled garden', '/ip/hotspot/walled-garden/ip', { comment: TAG },
+    { 'dst-address-list': WG_LIST, action: 'accept' });
+
+  // Every customer DNS query goes to the router, whatever server the phone
+  // names (the hotspot itself does not redirect DNS on RouterOS 7.21).
+  for (const proto of ['udp', 'tcp']) {
+    await ensure(c, r, `customer DNS to the router (${proto})`, '/ip/firewall/nat', { comment: `${TAG}-dns-redirect-${proto}` },
+      { chain: 'dstnat', 'src-address': plan.network, 'dst-address': `!${plan.gateway}`, protocol: proto, 'dst-port': '53', action: 'redirect', 'to-ports': '53' });
   }
 
   // The login page that sends customers to the payment page. The router
