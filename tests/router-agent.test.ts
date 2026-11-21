@@ -96,6 +96,33 @@ describe('request handling', () => {
   });
 });
 
+describe('line format for RouterOS', () => {
+  it('?format=lines returns S, P, R and D lines, safe to split on |', async () => {
+    rpcResult = { data: { ok: true, server_epoch: 100, poll_after_seconds: 15, accepted: 0, ignored: 0, jobs: [
+      { kind: 'access.provision', job_id: JOB, grant_id: 'g1', username: '23456789', password: '23456789', profile: { name: 'cx-5M-2M-2d', rate_limit: '2M/5M', shared_users: 2 }, remaining_seconds: 900, expires_epoch: 1795300670, limit_bytes_total: null, comment: 'connectly:g1', device_mac: 'aa:bb:cc:00:00:01' },
+      { kind: 'access.revoke', job_id: JOB, grant_id: 'g2', username: 'ABCD2345', reason: 'exp|ired\n' },
+      { kind: 'session.disconnect', job_id: JOB, router_session_id: '*A1' },
+    ] }, error: null };
+    const { handleAgentSync } = await mod();
+    const res = await handleAgentSync(new Request('https://x/api/router/agent/sync?format=lines', { method: 'POST', headers: { authorization: `Bearer ${TOKEN}` }, body: '{}' }));
+    expect(res.headers.get('content-type')).toContain('text/plain');
+    expect((await res.text()).split('\n')).toEqual([
+      'S|100|15',
+      `P|${JOB}|g1|23456789|23456789|cx-5M-2M-2d|2M/5M|2|900|1795300670||connectly:g1|aa:bb:cc:00:00:01`,
+      `R|${JOB}|g2|ABCD2345|expired`,
+      `D|${JOB}|*A1`,
+      '',
+    ]);
+  });
+
+  it('a rejected token is still a 401 in lines mode', async () => {
+    rpcResult = { data: { ok: false }, error: null };
+    const { handleAgentSync } = await mod();
+    const res = await handleAgentSync(new Request('https://x/api/router/agent/sync?format=lines', { method: 'POST', headers: { authorization: `Bearer ${TOKEN}` }, body: '{}' }));
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('sanitising what the router sends', () => {
   it('keeps well-formed results and drops the rest, at most 20', async () => {
     const results = [

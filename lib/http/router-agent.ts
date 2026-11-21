@@ -107,6 +107,33 @@ export function cleanStatus(raw: unknown): Obj {
   return out;
 }
 
+// RouterOS's JSON parser turns strings that look like numbers, times or IP
+// addresses into those types (a voucher such as 23456789 loses its string-ness),
+// so a router asks for ?format=lines and splits plain text instead:
+//   S|server_epoch|poll_after_seconds
+//   P|job_id|grant_id|username|password|profile|rate_limit|shared_users|remaining_seconds|expires_epoch|limit_bytes|comment|device_mac
+//   R|job_id|grant_id|username|reason
+//   D|job_id|router_session_id
+// Fields never contain "|" or line breaks (they are stripped); empty = not set.
+const field = (v: unknown): string => (v === null || v === undefined ? '' : String(v).replace(/[|\r\n]/g, ''));
+
+export function renderLines(data: Obj): string {
+  const out = [`S|${field(data.server_epoch)}|${field(data.poll_after_seconds)}`];
+  const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+  for (const j of jobs) {
+    if (!isObj(j)) continue;
+    if (j.kind === 'access.provision') {
+      const p = isObj(j.profile) ? j.profile : {};
+      out.push(['P', j.job_id, j.grant_id, j.username, j.password, p.name, p.rate_limit, p.shared_users, j.remaining_seconds, j.expires_epoch, j.limit_bytes_total, j.comment, j.device_mac].map(field).join('|'));
+    } else if (j.kind === 'access.revoke') {
+      out.push(['R', j.job_id, j.grant_id, j.username, j.reason].map(field).join('|'));
+    } else if (j.kind === 'session.disconnect') {
+      out.push(['D', j.job_id, j.router_session_id].map(field).join('|'));
+    }
+  }
+  return out.join('\n') + '\n';
+}
+
 export async function handleAgentSync(request: Request): Promise<Response> {
   const auth = request.headers.get('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
@@ -137,6 +164,12 @@ export async function handleAgentSync(request: Request): Promise<Response> {
     return json({ ok: false, error: 'server_error' }, 500);
   }
   if (!isObj(data) || data.ok !== true) return unauthorized();
+  if (new URL(request.url).searchParams.get('format') === 'lines') {
+    return new Response(renderLines(data), {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
   return json(data);
 }
 
