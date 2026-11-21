@@ -1,7 +1,8 @@
 import { db } from '@/lib/db/client';
 import { fetchAll } from '@/lib/db/fetch-all';
+import { paidTotals } from '@/lib/admin/metrics-loader';
 import { isUuid } from '@/lib/admin/inputs';
-import { DEFINITIONS, isPeriod, PERIODS, revenueBreakdown, type BreakdownPurchase, type BreakdownRow, type ExpenseRow, type Period } from '@/lib/admin/metrics';
+import { DEFINITIONS, isPeriod, periodRange, PERIODS, revenueBreakdown, type BreakdownRow, type ExpenseRow, type Period } from '@/lib/admin/metrics';
 import { PageHeader } from '@/components/admin/page-header';
 import { DashboardFilters } from '@/components/admin/dashboard-filters';
 import { EmptyRow, TableFrame, td, th, tr } from '@/components/admin/table';
@@ -17,19 +18,22 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
   const locationId = isUuid(sp.location) ? sp.location : null;
   const periodLabel = PERIODS.find((p) => p.id === period)!.label.toLowerCase();
 
+  const now = new Date();
+  const range = periodRange(period, now);
   const [locationsRes, plansRes, data] = await Promise.all([
     db.from('locations').select('id, name').order('name'),
     db.from('plans').select('id, name'),
     Promise.all([
-      fetchAll<BreakdownPurchase>((f, t) => db.from('purchases').select('status, amount_paid, amount_kobo, gateway_fee_ngn, paid_at, created_at, expires_at, location_id, phone_number, plan_id').eq('status', 'paid').order('created_at').range(f, t)),
+      paidTotals({ ...range, locationId, byLocation: true }),
+      paidTotals({ ...range, locationId, byPlan: true }),
       fetchAll<ExpenseRow>((f, t) => db.from('expenses').select('amount_ngn, expense_date, location_id').order('expense_date').range(f, t)),
-    ]).then(([p, e]) => ({ ok: true as const, p, e }), (err: Error) => ({ ok: false as const, err })),
+    ]).then(([l, p, e]) => ({ ok: true as const, l, p, e }), (err: Error) => ({ ok: false as const, err })),
   ]);
 
   const locations = (locationsRes.data ?? []) as { id: string; name: string }[];
   const locName = new Map(locations.map((l) => [l.id, l.name]));
   const planName = new Map(((plansRes.data ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]));
-  const b = data.ok ? revenueBreakdown(data.p, data.e, { period, locationId, now: new Date() }) : null;
+  const b = data.ok ? revenueBreakdown(data.l, data.p, data.e, { period, locationId, now }) : null;
 
   const totals = (rows: BreakdownRow[]) => rows.reduce((s, r) => ({ payments: s.payments + r.payments, revenue: s.revenue + r.revenue, fees: s.fees + r.fees, afterFees: s.afterFees + r.afterFees, expenses: s.expenses + r.expenses, net: s.net + r.net }), { payments: 0, revenue: 0, fees: 0, afterFees: 0, expenses: 0, net: 0 });
 

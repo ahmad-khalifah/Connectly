@@ -1,17 +1,56 @@
 import { db } from '@/lib/db/client';
 import { isControllerLive } from '@/lib/network/jobs';
-import type { MetricInput } from './metrics';
+import { periodRange, type CustomerCounts, type GrantCounts, type MetricInput, type PaidBucket, type Period, type RevenueWindows } from './metrics';
 import { fetchAll as all } from '@/lib/db/fetch-all';
 
-type RawGrant = { status: string; expires_at: string; revoked_at: string | null; revoke_reason: string | null; router_id: string; purchases: { phone_number: string | null } | { phone_number: string | null }[] | null };
+const n = (v: unknown) => (v === null || v === undefined || v === '' ? 0 : Number(v));
 
-/** Fetches what computeMetrics needs. Throws on a database error so the page says so instead of showing zeros. */
-export async function loadMetricInput(): Promise<MetricInput> {
-  const [purchases, expenses, rawGrants, customers, routers, jobs, locations, heartbeat, sessions] = await Promise.all([
-    all((f, t) => db.from('purchases').select('status, amount_paid, amount_kobo, gateway_fee_ngn, paid_at, created_at, expires_at, location_id, phone_number').in('status', ['paid', 'failed']).order('created_at').range(f, t)),
+/** Calls a database function and throws on error, so the page says so instead of showing zeros. */
+async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await db.rpc(fn, args);
+  if (error) throw new Error(`${fn}: ${error.message}`);
+  return data as T;
+}
+
+type PaidArgs = { from: Date | null; to: Date; locationId?: string | null; unit?: 'day' | 'month' | 'none'; byLocation?: boolean; byPlan?: boolean };
+
+/** admin_paid_totals: only the totals travel, never the purchases. */
+export async function paidTotals(a: PaidArgs): Promise<PaidBucket[]> {
+  const rows = await rpc<Record<string, unknown>[]>('admin_paid_totals', {
+    p_from: a.from?.toISOString() ?? null,
+    p_to: a.to.toISOString(),
+    p_location: a.locationId ?? null,
+    p_unit: a.unit ?? 'none',
+    p_by_location: a.byLocation ?? false,
+    p_by_plan: a.byPlan ?? false,
+  });
+  return (rows ?? []).map((r) => ({
+    bucket: (r.bucket as string | null) ?? null,
+    location_id: (r.location_id as string | null) ?? null,
+    plan_id: (r.plan_id as string | null) ?? null,
+    payments: n(r.payments),
+    revenue: n(r.revenue),
+    fees: n(r.fees),
+    failed: n(r.failed),
+  }));
+}
+
+const revenueOf = (b: PaidBucket[]) => Math.round(b.reduce((s, x) => s + x.revenue, 0) * 100) / 100;
+
+/** Fetches what computeMetrics needs for one period and location. Throws on a database error. */
+export async function loadMetricInput(period: Period, locationId: string | null, now: Date): Promise<MetricInput> {
+  const { from, to } = periodRange(period, now);
+  const window = (p: Period) => paidTotals({ from: periodRange(p, now).from, to: now, locationId }).then(revenueOf);
+
+  const [paid, today, last7, month, allTime, grantRows, customerRows, expenses, routers, jobs, locations, heartbeat, sessions] = await Promise.all([
+    paidTotals({ from, to, locationId, unit: period === 'all' ? 'month' : 'day' }),
+    window('today'),
+    window('7d'),
+    window('month'),
+    window('all'),
+    rpc<Record<string, unknown>[]>('admin_grant_counts', { p_from: from?.toISOString() ?? null, p_to: to.toISOString(), p_now: now.toISOString(), p_location: locationId }),
+    rpc<Record<string, unknown>[]>('admin_customer_counts', { p_from: from?.toISOString() ?? null, p_to: to.toISOString() }),
     all((f, t) => db.from('expenses').select('amount_ngn, expense_date, location_id').order('expense_date').range(f, t)),
-    all<RawGrant>((f, t) => db.from('network_authorizations').select('status, expires_at, revoked_at, revoke_reason, router_id, purchases(phone_number)').order('created_at').range(f, t)),
-    all((f, t) => db.from('customers').select('created_at').order('created_at').range(f, t)),
     all<{ id: string; status: string | null; lifecycle_status: string; location_id: string | null; last_seen_at: string | null }>((f, t) => db.from('routers').select('id, status, lifecycle_status, location_id, last_seen_at').range(f, t)),
     all<{ status: string; updated_at: string | null; finished_at: string | null; router_id: string }>((f, t) => db.from('controller_jobs').select('status, updated_at, finished_at, router_id').in('status', ['queued', 'running', 'failed', 'dead']).range(f, t)),
     all((f, t) => db.from('locations').select('id, is_active').range(f, t)),
@@ -21,15 +60,18 @@ export async function loadMetricInput(): Promise<MetricInput> {
 
   const routerLocation = new Map(routers.map((r) => [r.id, r.location_id]));
   const last = (heartbeat.data?.[0] as { last_heartbeat_at?: string } | undefined)?.last_heartbeat_at;
+  const g = grantRows?.[0] ?? {};
+  const c = customerRows?.[0] ?? {};
+  const windows: RevenueWindows = { today, last7, month, all: allTime };
+  const grants: GrantCounts = { running: n(g.running), customersOnPlans: n(g.customers_on_plans), ended: n(g.ended), endedEarly: n(g.ended_early) };
+  const customers: CustomerCounts = { registered: n(c.registered), newCustomers: n(c.new_customers) };
 
   return {
-    purchases: purchases as MetricInput['purchases'],
+    paid,
+    windows,
+    grants,
+    customers,
     expenses: expenses as MetricInput['expenses'],
-    grants: rawGrants.map((g) => {
-      const p = Array.isArray(g.purchases) ? g.purchases[0] : g.purchases;
-      return { status: g.status, expires_at: g.expires_at, revoked_at: g.revoked_at, revoke_reason: g.revoke_reason, location_id: routerLocation.get(g.router_id) ?? null, phone: p?.phone_number ?? null };
-    }),
-    customers: customers as MetricInput['customers'],
     routers: routers.map(({ status, lifecycle_status, location_id, last_seen_at }) => ({ status, lifecycle_status, location_id, last_seen_at })),
     jobs: jobs.map((j) => ({ status: j.status, updated_at: j.updated_at, finished_at: j.finished_at, location_id: routerLocation.get(j.router_id) ?? null })),
     locations: locations as MetricInput['locations'],

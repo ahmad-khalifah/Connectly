@@ -64,11 +64,25 @@ export type LocationRow = { id: string; is_active: boolean | null };
 
 export type SessionRow = { location_id: string | null; last_seen_at: string | null };
 
+/** Paid and failed purchases grouped by period bucket, location and/or plan (admin_paid_totals). */
+export type PaidBucket = { bucket: string | null; location_id: string | null; plan_id: string | null; payments: number; revenue: number; fees: number; failed: number };
+export type GrantCounts = { running: number; customersOnPlans: number; ended: number; endedEarly: number };
+export type CustomerCounts = { registered: number; newCustomers: number };
+export type RevenueWindows = { today: number; last7: number; month: number; all: number };
+
+/**
+ * What the dashboard needs. Money, plan and customer figures arrive already
+ * totalled by the database for the chosen period and location; only small
+ * tables (expenses, routers, jobs, locations, sessions) arrive as rows.
+ */
 export type MetricInput = {
-  purchases: PurchaseRow[];
+  /** The chosen period and location, one row per Lagos day (or month for all time). */
+  paid: PaidBucket[];
+  /** Revenue for the fixed windows, for the chosen location. */
+  windows: RevenueWindows;
+  grants: GrantCounts;
+  customers: CustomerCounts;
   expenses: ExpenseRow[];
-  grants: GrantRow[];
-  customers: CustomerRow[];
   routers: RouterRow[];
   jobs: JobRow[];
   locations: LocationRow[];
@@ -109,23 +123,13 @@ export function computeMetrics(input: MetricInput, opts: { period: Period; locat
   const { from, to } = periodRange(period, now);
   const atLoc = <T extends { location_id: string | null }>(rows: T[]) => (locationId ? rows.filter((r) => r.location_id === locationId) : rows);
 
-  const purchases = atLoc(input.purchases);
-  const paid = purchases.filter((p) => p.status === 'paid');
-  const paidInPeriod = paid.filter((p) => inRange(paidWhen(p), from, to));
-  const revenueIn = (f: Date | null) => round2(paid.filter((p) => inRange(paidWhen(p), f, now)).reduce((s, p) => s + paidAmount(p), 0));
-
-  const revenue = round2(paidInPeriod.reduce((s, p) => s + paidAmount(p), 0));
-  const fees = round2(paidInPeriod.reduce((s, p) => s + num(p.gateway_fee_ngn), 0));
+  const revenue = round2(input.paid.reduce((s, b) => s + num(b.revenue), 0));
+  const fees = round2(input.paid.reduce((s, b) => s + num(b.fees), 0));
   const expenses = round2(
     atLoc(input.expenses)
       .filter((e) => inRange(`${e.expense_date}T12:00:00+01:00`, from, to))
       .reduce((s, e) => s + num(e.amount_ngn), 0)
   );
-
-  const grants = atLoc(input.grants);
-  const running = grants.filter((g) => (g.status === 'active' || g.status === 'pending_device') && Date.parse(g.expires_at) > now.getTime());
-  const ended = grants.filter((g) => g.status !== 'revoked' && Date.parse(g.expires_at) <= now.getTime() && inRange(g.expires_at, from, to));
-  const endedEarly = grants.filter((g) => g.status === 'revoked' && g.revoke_reason !== 'expired' && inRange(g.revoked_at, from, to));
 
   const routers = atLoc(input.routers);
   const activeRouters = routers.filter((r) => r.lifecycle_status === 'active');
@@ -135,16 +139,15 @@ export function computeMetrics(input: MetricInput, opts: { period: Period; locat
   // Series
   const unit: 'day' | 'month' = period === 'all' ? 'month' : 'day';
   const buckets = new Map<string, { revenue: number; payments: number }>();
-  const keyOf = (iso: string) => (unit === 'day' ? lagosDateKey(new Date(iso)) : lagosDateKey(new Date(iso)).slice(0, 7));
   if (unit === 'day' && from) {
     for (let t = from.getTime(); t <= now.getTime(); t += DAY_MS) buckets.set(lagosDateKey(new Date(t)), { revenue: 0, payments: 0 });
   }
-  for (const p of paidInPeriod) {
-    const k = keyOf(paidWhen(p));
-    const b = buckets.get(k) ?? { revenue: 0, payments: 0 };
-    b.revenue = round2(b.revenue + paidAmount(p));
-    b.payments += 1;
-    buckets.set(k, b);
+  for (const p of input.paid) {
+    if (!p.bucket || num(p.payments) === 0) continue;
+    const b = buckets.get(p.bucket) ?? { revenue: 0, payments: 0 };
+    b.revenue = round2(b.revenue + num(p.revenue));
+    b.payments += num(p.payments);
+    buckets.set(p.bucket, b);
   }
   if (unit === 'month' && buckets.size > 0) {
     const keys = [...buckets.keys()].sort();
@@ -169,22 +172,17 @@ export function computeMetrics(input: MetricInput, opts: { period: Period; locat
       afterFees: round2(revenue - fees),
       expenses,
       netProfit: round2(revenue - fees - expenses),
-      successfulPayments: paidInPeriod.length,
-      failedPayments: purchases.filter((p) => p.status === 'failed' && inRange(p.created_at, from, to)).length,
-      windows: {
-        today: revenueIn(periodRange('today', now).from),
-        last7: revenueIn(periodRange('7d', now).from),
-        month: revenueIn(periodRange('month', now).from),
-        all: revenueIn(null),
-      },
+      successfulPayments: input.paid.reduce((s, b) => s + num(b.payments), 0),
+      failedPayments: input.paid.reduce((s, b) => s + num(b.failed), 0),
+      windows: input.windows,
     },
     customers: {
-      plansRunning: running.length,
-      customersOnPlans: new Set(running.map((g) => g.phone).filter(Boolean)).size,
-      plansEnded: ended.length,
-      endedEarly: endedEarly.length,
-      registered: input.customers.length,
-      newCustomers: input.customers.filter((c) => inRange(c.created_at, from, to)).length,
+      plansRunning: input.grants.running,
+      customersOnPlans: input.grants.customersOnPlans,
+      plansEnded: input.grants.ended,
+      endedEarly: input.grants.endedEarly,
+      registered: input.customers.registered,
+      newCustomers: input.customers.newCustomers,
     },
     network: {
       locationsOpen: locations.filter((l) => l.is_active !== false).length,
@@ -203,6 +201,59 @@ export function computeMetrics(input: MetricInput, opts: { period: Period; locat
     series,
     seriesUnit: unit,
   };
+}
+
+// ------------------------------------------------- reference implementations
+// The database computes these figures (supabase/migrations/20261121090000_admin_totals.sql).
+// The same definitions in TypeScript, over raw rows, are used by the unit tests
+// and checked against the SQL functions in supabase/tests/admin_totals.test.mjs.
+
+/** admin_paid_totals over rows. */
+export function aggregatePaid(
+  rows: (PurchaseRow & { plan_id?: string | null })[],
+  o: { from: Date | null; to: Date; locationId: string | null; unit: 'day' | 'month' | 'none'; byLocation?: boolean; byPlan?: boolean }
+): PaidBucket[] {
+  const out = new Map<string, PaidBucket>();
+  const add = (at: string, p: PurchaseRow & { plan_id?: string | null }, paidOne: boolean) => {
+    const day = lagosDateKey(new Date(at));
+    const bucket = o.unit === 'day' ? day : o.unit === 'month' ? day.slice(0, 7) : null;
+    const location_id = o.byLocation ? p.location_id : null;
+    const plan_id = o.byPlan ? (p.plan_id ?? null) : null;
+    const k = JSON.stringify([bucket, location_id, plan_id]);
+    const b = out.get(k) ?? { bucket, location_id, plan_id, payments: 0, revenue: 0, fees: 0, failed: 0 };
+    if (paidOne) { b.payments += 1; b.revenue = round2(b.revenue + paidAmount(p)); b.fees = round2(b.fees + num(p.gateway_fee_ngn)); }
+    else b.failed += 1;
+    out.set(k, b);
+  };
+  for (const p of rows) {
+    if (o.locationId && p.location_id !== o.locationId) continue;
+    if (p.status === 'paid' && inRange(paidWhen(p), o.from, o.to)) add(paidWhen(p), p, true);
+    else if (p.status === 'failed' && inRange(p.created_at, o.from, o.to)) add(p.created_at, p, false);
+  }
+  return [...out.values()];
+}
+
+/** Revenue for the fixed windows, from the rows. */
+export function revenueWindows(rows: PurchaseRow[], now: Date, locationId: string | null): RevenueWindows {
+  const rev = (from: Date | null) => round2(aggregatePaid(rows, { from, to: now, locationId, unit: 'none' }).reduce((s, b) => s + b.revenue, 0));
+  return { today: rev(periodRange('today', now).from), last7: rev(periodRange('7d', now).from), month: rev(periodRange('month', now).from), all: rev(null) };
+}
+
+/** admin_grant_counts over rows. */
+export function countGrants(grants: GrantRow[], o: { from: Date | null; to: Date; now: Date; locationId: string | null }): GrantCounts {
+  const g = o.locationId ? grants.filter((x) => x.location_id === o.locationId) : grants;
+  const running = g.filter((x) => (x.status === 'active' || x.status === 'pending_device') && Date.parse(x.expires_at) > o.now.getTime());
+  return {
+    running: running.length,
+    customersOnPlans: new Set(running.map((x) => x.phone).filter(Boolean)).size,
+    ended: g.filter((x) => x.status !== 'revoked' && Date.parse(x.expires_at) <= o.now.getTime() && inRange(x.expires_at, o.from, o.to)).length,
+    endedEarly: g.filter((x) => x.status === 'revoked' && x.revoke_reason !== 'expired' && inRange(x.revoked_at, o.from, o.to)).length,
+  };
+}
+
+/** admin_customer_counts over rows. */
+export function countCustomers(customers: CustomerRow[], from: Date | null, to: Date): CustomerCounts {
+  return { registered: customers.length, newCustomers: customers.filter((c) => inRange(c.created_at, from, to)).length };
 }
 
 /** How each figure is worked out. Shown on the dashboard. */
@@ -234,24 +285,29 @@ export const DEFINITIONS: { name: string; how: string }[] = [
 export type BreakdownPurchase = PurchaseRow & { plan_id: string | null };
 export type BreakdownRow = { id: string | null; payments: number; revenue: number; fees: number; afterFees: number; expenses: number; net: number };
 
-/** Revenue in the period grouped by location (with that location's expenses) and by plan. */
+/**
+ * Revenue in the period by location (with that location's expenses) and by plan.
+ * `byLocation` and `byPlan` are admin_paid_totals rows for the period, grouped
+ * by location and by plan respectively.
+ */
 export function revenueBreakdown(
-  purchases: BreakdownPurchase[],
+  byLocationTotals: PaidBucket[],
+  byPlanTotals: PaidBucket[],
   expenses: ExpenseRow[],
   opts: { period: Period; locationId: string | null; now: Date }
 ): { byLocation: BreakdownRow[]; byPlan: BreakdownRow[]; generalExpenses: number } {
   const { from, to } = periodRange(opts.period, opts.now);
-  const paidIn = purchases.filter((p) => p.status === 'paid' && inRange(paidWhen(p), from, to) && (!opts.locationId || p.location_id === opts.locationId));
   const expIn = expenses.filter((e) => inRange(`${e.expense_date}T12:00:00+01:00`, from, to) && (!opts.locationId || e.location_id === opts.locationId));
 
-  const group = (key: (p: BreakdownPurchase) => string | null, withExpenses: boolean) => {
+  const group = (totals: PaidBucket[], key: (b: PaidBucket) => string | null, withExpenses: boolean) => {
     const m = new Map<string | null, BreakdownRow>();
     const row = (id: string | null) => m.get(id) ?? (m.set(id, { id, payments: 0, revenue: 0, fees: 0, afterFees: 0, expenses: 0, net: 0 }), m.get(id)!);
-    for (const p of paidIn) {
-      const r = row(key(p));
-      r.payments += 1;
-      r.revenue = round2(r.revenue + paidAmount(p));
-      r.fees = round2(r.fees + num(p.gateway_fee_ngn));
+    for (const b of totals) {
+      if (num(b.payments) === 0) continue;
+      const r = row(key(b));
+      r.payments += num(b.payments);
+      r.revenue = round2(r.revenue + num(b.revenue));
+      r.fees = round2(r.fees + num(b.fees));
     }
     if (withExpenses) for (const e of expIn) if (e.location_id) { const r = row(e.location_id); r.expenses = round2(r.expenses + num(e.amount_ngn)); }
     for (const r of m.values()) { r.afterFees = round2(r.revenue - r.fees); r.net = round2(r.afterFees - r.expenses); }
@@ -259,8 +315,8 @@ export function revenueBreakdown(
   };
 
   return {
-    byLocation: group((p) => p.location_id, true),
-    byPlan: group((p) => p.plan_id, false),
+    byLocation: group(byLocationTotals, (b) => b.location_id, true),
+    byPlan: group(byPlanTotals, (b) => b.plan_id, false),
     generalExpenses: opts.locationId ? 0 : round2(expIn.filter((e) => !e.location_id).reduce((s, e) => s + num(e.amount_ngn), 0)),
   };
 }

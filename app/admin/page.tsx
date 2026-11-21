@@ -33,7 +33,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
 
   const now = new Date();
   const [inputResult, alerts, locationsRes, routersRes, activityRes] = await Promise.all([
-    loadMetricInput().then((v) => ({ ok: true as const, v }), (e: Error) => ({ ok: false as const, e })),
+    loadMetricInput(period, locationId, now).then((v) => ({ ok: true as const, v }), (e: Error) => ({ ok: false as const, e })),
     loadAlerts(),
     db.from('locations').select('id, name').order('name'),
     db.from('routers').select('id, name, identifier, status, lifecycle_status, last_seen_at, location_id').neq('lifecycle_status', 'retired').order('name'),

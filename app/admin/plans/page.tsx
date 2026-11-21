@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
-import { fetchAll } from '@/lib/db/fetch-all';
+import { paidTotals } from '@/lib/admin/metrics-loader';
 import { planToInput } from '@/lib/admin/inputs';
 import { naira, planData, planDuration } from '@/lib/plan-format';
 import PlanStatusButton from '../components/plan-status-button';
@@ -19,13 +19,13 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
   const [{ data: plans, error }, { data: locations }, paid] = await Promise.all([
     db.from('plans').select('*').order('price_kobo', { ascending: true }),
     db.from('locations').select('id, name'),
-    fetchAll<{ plan_id: string }>((f, t) => db.from('purchases').select('plan_id').eq('status', 'paid').order('id').range(f, t)).catch(() => null),
+    paidTotals({ from: null, to: new Date(), byPlan: true }).catch(() => null),
   ]);
   if (error) console.error('[PLANS_FETCH_ERROR]', error);
 
   const locationName = new Map((locations ?? []).map((l) => [l.id, l.name as string]));
   const paidByPlan = new Map<string, number>();
-  for (const p of paid ?? []) paidByPlan.set(p.plan_id, (paidByPlan.get(p.plan_id) ?? 0) + 1);
+  for (const p of paid ?? []) if (p.plan_id) paidByPlan.set(p.plan_id, (paidByPlan.get(p.plan_id) ?? 0) + p.payments);
 
   const all = (plans ?? []).map((row) => ({ id: row.id as string, ...planToInput(row), paidCount: paidByPlan.get(row.id) ?? 0 }));
   const archivedCount = all.filter((p) => !p.isActive).length;

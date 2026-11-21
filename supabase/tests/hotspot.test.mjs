@@ -92,7 +92,8 @@ test('browser roles cannot touch hotspot settings', async () => {
 
 test('rollback restores the exact post-network schema; refuses while hotspot jobs exist', async () => {
   const before = await fingerprint(await freshDb({ upTo: '20261118090000_network_management.sql' }));
-  const db = await freshDb();
+  // Pinned to this migration so later migrations do not appear in the comparison.
+  const db = await freshDb({ upTo: '20261119090000_router_hotspot.sql' });
   const r = await router(db, 'R1');
   await db.query(`select enqueue_job('router.configure_hotspot', $1, null, '{}', 'h1', 'test')`, [r.id]);
   await assert.rejects(db.exec(fs.readFileSync(ROLLBACK, 'utf8')), /router.configure_hotspot jobs exist/);

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db/client';
-import { fetchAll } from '@/lib/db/fetch-all';
+import { paidTotals } from '@/lib/admin/metrics-loader';
 import { appUrl } from '@/lib/env';
 import { isUuid } from '@/lib/admin/inputs';
 import { requestTime } from '@/lib/time';
@@ -32,7 +32,7 @@ export default async function LocationDetailPage({ params }: { params: Promise<{
     db.from('routers').select('id, name, identifier, lifecycle_status, status, management_ip, routeros_version, board_name, uptime_seconds, cpu_usage_pct, memory_usage_pct, last_seen_at').eq('location_id', id).neq('lifecycle_status', 'retired').order('name'),
     db.from('purchases').select('id, status, amount_paid, amount_kobo, created_at, phone_number, plans(name)').eq('location_id', id).order('created_at', { ascending: false }).limit(10),
     db.from('plans').select('id, name, price_kobo, duration_seconds, allowed_location_ids').eq('is_active', true).order('price_kobo'),
-    fetchAll<{ amount_paid: number | null; amount_kobo: number | null }>((f, t) => db.from('purchases').select('amount_paid, amount_kobo').eq('location_id', id).eq('status', 'paid').order('id').range(f, t)).catch(() => null),
+    paidTotals({ from: null, to: new Date(), locationId: id }).catch(() => null),
   ]);
 
   const location = locationRes.data;
@@ -45,7 +45,7 @@ export default async function LocationDetailPage({ params }: { params: Promise<{
     ? await db.from('network_authorizations').select('id', { count: 'exact', head: true }).in('router_id', routerIds).in('status', ['active', 'pending_device']).gt('expires_at', now)
     : { count: 0 };
 
-  const revenue = paid ? paid.reduce((s, p) => s + (p.amount_paid !== null ? Number(p.amount_paid) : (p.amount_kobo ?? 0) / 100), 0) : null;
+  const revenue = paid ? paid.reduce((s, p) => s + p.revenue, 0) : null;
   const plansHere = (plansRes.data ?? []).filter((p) => !p.allowed_location_ids?.length || p.allowed_location_ids.includes(id));
   const active = routers.filter((r) => r.lifecycle_status === 'active');
   const infoLink = `${appUrl()}/connect?loc=${location.slug}`;
