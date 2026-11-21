@@ -92,12 +92,33 @@ export function planHotspot(routerIdentifier: string, s: HotspotSettings, p: Por
   // on test day), so the router's own parameters are appended with & then.
   const sep = p.portal_url.includes('?') ? '&' : '?';
   const target = `${p.portal_url}${sep}router=${encodeURIComponent(routerIdentifier)}&mac=$(mac-esc)&ip=$(ip)&link=$(link-login-only-esc)`;
+  // Shown for a moment before the portal opens, so it carries the brand.
+  // Self-contained (an unpaid phone can load nothing else from here) and free
+  // of "$" outside MikroTik's own variables, which the router would expand.
   const loginHtml = [
     '<!doctype html>',
-    '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
     `<meta http-equiv="refresh" content="0; url=${target}">`,
-    '<title>Connectly WiFi</title></head>',
-    `<body><p>Opening Connectly WiFi... <a href="${target}">Tap here if nothing happens</a>.</p></body></html>`,
+    '<meta name="theme-color" content="#6b1420">',
+    '<title>Connectly WiFi</title>',
+    '<style>',
+    'html,body{margin:0;height:100%;background:#f3f4f6;color:#1f2430;font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}',
+    'main{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;box-sizing:border-box;text-align:center}',
+    '.mark{width:72px;height:72px}',
+    '.lens{fill:#d9a441;animation:pulse 1.4s ease-in-out infinite}',
+    '@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}',
+    '@media (prefers-reduced-motion:reduce){.lens{animation:none}}',
+    'h1{margin:0;font-size:20px;font-weight:700;color:#6b1420}',
+    'p{margin:0;color:#5a6070;font-size:15px}',
+    'a{display:inline-block;margin-top:4px;padding:12px 22px;border-radius:10px;background:#6b1420;color:#fff;text-decoration:none;font-weight:600}',
+    '</style></head>',
+    '<body><main>',
+    '<svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><path class="lens" d="M50 24.02 A30 30 0 0 1 50 75.98 A30 30 0 0 1 50 24.02 Z"/>'
+      + '<circle cx="35" cy="50" r="30" fill="none" stroke="#6b1420" stroke-width="9"/><circle cx="65" cy="50" r="30" fill="none" stroke="#6b1420" stroke-width="9"/></svg>',
+    '<h1>Opening Connectly WiFi</h1>',
+    '<p>Plans and payment open in a moment.</p>',
+    `<a href="${target}">Continue</a>`,
+    '</main></body></html>',
   ].join('\n');
 
   return {

@@ -136,6 +136,12 @@ test('hotspot plan: pool skips network, gateway and broadcast; walled garden mer
   const shared = planHotspot('cx-1', { lan_interface: 'ether2', gateway_cidr: '10.10.0.1/22', dns_name: 'wifi.getconnectly.net', extra_walled_garden: [], version: 1 },
     { portal_url: 'https://staging.example.vercel.app/portal?_vercel_share=abc', walled_garden_hosts: [] });
   assert.match(shared.loginHtml, /portal\?_vercel_share=abc&router=cx-1&mac=\$\(mac-esc\)/);
+  // The branded page is self-contained, and its only "$" are MikroTik's own variables.
+  assert.match(p.loginHtml, /<svg class="mark"/);
+  assert.match(p.loginHtml, /<a href="https:\/\/getconnectly\.net\/portal\?router=cx-garki-01[^"]*">Continue<\/a>/);
+  assert.doesNotMatch(p.loginHtml, /<(script|link|img)\b|src=|url\((?!['"]?data:)/, 'nothing loaded from elsewhere');
+  assert.deepEqual([...new Set(p.loginHtml.match(/\$\([^)]*\)/g))].sort(), ['$(ip)', '$(link-login-only-esc)', '$(mac-esc)']);
+  assert.equal(p.loginHtml.split('$').length - 1, p.loginHtml.match(/\$\(/g)!.length, 'no stray $');
   assert.ok(shared.walledGarden.includes('staging.example.vercel.app'));
   const q = planHotspot('r', { lan_interface: 'bridge1', gateway_cidr: '192.168.50.254/24', dns_name: 'a.example.com', extra_walled_garden: [], version: 1 },
     { portal_url: 'https://x.example.com/p', walled_garden_hosts: [] });
