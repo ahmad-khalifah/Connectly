@@ -424,8 +424,12 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.deepEqual([s.version, s.applied_version], [1, 1]);
     assert.ok(s.applied_at);
 
+    // RouterOS derives a dynamic hotspot NAT rule from the IP walled garden and copies its comment (L009).
+    m('/ip/firewall/nat').unshift({ '.id': '*1A', chain: 'hs-unauth', action: 'return', dynamic: 'true', comment: 'connectly-hotspot' });
     const id2 = await enqueue('router.configure_hotspot', r.id);
     await ctl.runOnce();
+    assert.equal((await job(id2)).status, 'succeeded', 'dynamic rules with our comment are left alone');
+    assert.ok(m('/ip/firewall/nat').some((x) => x['.id'] === '*1A' && x.chain === 'hs-unauth'));
     const res2 = (await job(id2)).result;
     assert.deepEqual([res2.created.length, res2.updated.length, res2.removed.length], [0, 0, 0], 'second apply changes nothing');
 

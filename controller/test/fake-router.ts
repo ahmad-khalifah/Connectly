@@ -105,12 +105,14 @@ class FakeClient implements RouterClient {
     this.call(`set ${path}`);
     const row = this.menu(path).find((r) => r['.id'] === id);
     if (!row) throw new RouterError('not_found', 'no such item', 404);
+    if (row.dynamic === 'true') throw new RouterError('protocol', "failure: can't edit dynamic object", 400);
     Object.assign(row, fields);
   }
   async remove(path: string, id: string) {
     this.call(`remove ${path}`);
     const m = this.menu(path);
     const i = m.findIndex((r) => r['.id'] === id);
+    if (i >= 0 && m[i]!.dynamic === 'true') throw new RouterError('protocol', "failure: can't remove dynamic object", 400);
     if (i >= 0) m.splice(i, 1);
   }
   async command(path: string, fields: Record<string, string>) {

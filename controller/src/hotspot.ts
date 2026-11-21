@@ -161,7 +161,11 @@ async function placeAboveFasttrack(c: RouterClient, r: ApplyReport, label: strin
 
 /** Makes one menu entry (found by `key`) have `fields`, creating it if missing. */
 async function ensure(c: RouterClient, r: ApplyReport, label: string, path: string, key: Record<string, string>, fields: Record<string, string>) {
-  const rows = await c.list(path, key);
+  // RouterOS copies an entry's comment onto the dynamic rules it derives from
+  // it (the IP walled garden's comment appears on a dynamic hotspot NAT rule),
+  // and dynamic rules cannot be edited: only static rows are ours. Found on the
+  // L009, 21 Nov 2026 ("can't edit dynamic object").
+  const rows = (await c.list(path, key)).filter((x) => x.dynamic !== 'true');
   const want = { ...key, ...fields };
   if (rows.length === 0) {
     await c.add(path, want);
