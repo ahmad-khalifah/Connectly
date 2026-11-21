@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { appUrl } from '@/lib/env';
 import { db } from '@/lib/db/client';
@@ -19,6 +20,7 @@ type Loc = {
 };
 
 export default async function LocationsPage() {
+  await requireAdminPage();
   const { data, error } = await db
     .from('locations')
     .select('id, name, slug, status, is_active, institutions(name), routers(id, status, lifecycle_status, last_seen_at), purchases(status, amount_paid, amount_kobo, network_authorizations(status, revoked_at, expires_at))')

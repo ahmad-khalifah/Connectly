@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db/client';
@@ -10,6 +11,7 @@ import { Notice } from '@/components/ui/notice';
 export const dynamic = 'force-dynamic';
 
 export default async function EditRouterPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const { id } = await params;
   if (!isUuid(id)) notFound();
 

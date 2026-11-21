@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Wordmark } from '@/components/ui/lens-mark';
 import { cn } from '@/lib/utils';
+import { browserAuth } from '@/lib/auth/browser';
 
 type NavItem = { name: string; href: string; icon: React.ComponentType<{ className?: string }> };
 
@@ -113,9 +114,9 @@ export default function AdminShell({
       <button
         type="button"
         onClick={async () => {
-          await fetch('/api/auth/logout', { method: 'POST' });
+          // Ends the session with Supabase Auth and clears the session cookie.
+          await browserAuth().signOut().catch(() => {});
           router.replace('/login');
-          router.refresh();
         }}
         className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted hover:text-bad"
       >

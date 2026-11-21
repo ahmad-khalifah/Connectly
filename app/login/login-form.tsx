@@ -1,17 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { browserAuth } from '@/lib/auth/browser';
 import { LensMark } from '@/components/ui/lens-mark';
 import { Field, inputClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
-
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 /** Supabase's own wording, said plainly. */
 function friendly(message: string): string {
@@ -21,18 +16,21 @@ function friendly(message: string): string {
   return message;
 }
 
-export default function LoginForm({ initialError = '' }: { initialError?: string }) {
+const NOT_AUTHORIZED = 'This account is not on the admin list. Sign in with an admin account.';
+
+export default function LoginForm() {
   const router = useRouter();
+  const notAuthorized = useSearchParams().get('error') === 'not_authorized';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState(initialError);
+  const [error, setError] = useState(notAuthorized ? NOT_AUTHORIZED : '');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error: authError } = await browserAuth().signInWithPassword({ email, password });
     if (authError) {
       setError(friendly(authError.message));
       setLoading(false);

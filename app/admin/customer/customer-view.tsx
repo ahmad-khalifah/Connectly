@@ -1,16 +1,31 @@
+'use client';
+
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { db } from '@/lib/db/client';
-import { isUuid } from '@/lib/admin/inputs';
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { smsStatusLabel } from '@/lib/sms';
-import { requestTime } from '@/lib/time';
 import { PageHeader } from '@/components/admin/page-header';
 import { Stat, StatGrid } from '@/components/admin/stat-grid';
 import { EmptyRow, lagos, TableFrame, td, th, tr } from '@/components/admin/table';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Panel } from '@/components/ui/panel';
+import { useAdminView, viewUrl, ViewState } from '@/components/admin/admin-data';
 
-export const dynamic = 'force-dynamic';
+// One customer's history. Data: /api/admin/view/customer?id= (lib/http/admin-api.ts).
+
+type Named = { name: string } | { name: string }[] | null;
+type Grant = { status: string; revoked_at: string | null; voucher_code: string | null };
+type Purchase = {
+  id: string; reference: string; status: string; amount_paid: number | string | null; amount_kobo: number | null; net_amount_ngn: number | string | null;
+  created_at: string; paid_at: string | null; expires_at: string | null; failure_reason: string | null;
+  plans: Named; locations: Named; network_authorizations: Grant | Grant[] | null;
+};
+type Data = {
+  customer: { id: string; phone_number: string; created_at: string };
+  purchases: Purchase[];
+  devices: { id: string; mac_address: string; last_seen_at: string | null }[];
+  sms: { id: string; purchase_id: string; status: string; created_at: string; last_error: string | null }[];
+};
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
@@ -20,35 +35,20 @@ const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
 };
 const SMS_TONE: Record<string, BadgeTone> = { ok: 'ok', bad: 'bad', neutral: 'neutral', waiting: 'warn' };
 
-export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  if (!isUuid(id)) notFound();
+export default function CustomerView() {
+  const id = useSearchParams().get('id');
+  const { loaded, reload } = useAdminView<Data>(id ? viewUrl('customer', { id }) : null);
+  if (!id) return <ViewState loaded={{ state: 'not_found' }} reload={reload} what="Customer">{() => null}</ViewState>;
+  return <ViewState loaded={loaded} reload={reload} what="Customer">{(d) => <Customer {...d} />}</ViewState>;
+}
 
-  const { data: customer } = await db.from('customers').select('id, phone_number, created_at').eq('id', id).maybeSingle();
-  if (!customer) notFound();
-
-  // Purchases are matched by customer link and by phone, so purchases made
-  // before the customer record existed still appear.
-  const [{ data: purchases }, { data: devices }] = await Promise.all([
-    db.from('purchases')
-      .select('id, reference, status, amount_paid, amount_kobo, net_amount_ngn, created_at, paid_at, expires_at, failure_reason, plans(name), locations(name), network_authorizations(status, revoked_at, voucher_code)')
-      .or(/^\d{6,20}$/.test(customer.phone_number) ? `customer_id.eq.${id},phone_number.eq.${customer.phone_number}` : `customer_id.eq.${id}`)
-      .order('created_at', { ascending: false })
-      .limit(100),
-    db.from('devices').select('id, mac_address, last_seen_at').eq('customer_id', id),
-  ]);
-
-  const list = purchases ?? [];
-  const ids = list.map((p) => p.id);
-  const { data: sms } = ids.length
-    ? await db.from('notifications').select('id, purchase_id, status, created_at, last_error').in('purchase_id', ids)
-    : { data: [] as { id: string; purchase_id: string; status: string; created_at: string; last_error: string | null }[] };
-  const smsByPurchase = new Map((sms ?? []).map((n) => [n.purchase_id, n]));
-
-  const now = requestTime();
-  const grantOf = (p: (typeof list)[number]) => one(p.network_authorizations as { status: string; revoked_at: string | null; voucher_code: string | null }[] | null);
+function Customer({ customer, purchases, devices, sms }: Data) {
+  const list = purchases;
+  const smsByPurchase = new Map(sms.map((n) => [n.purchase_id, n]));
+  const [now] = useState(() => Date.now()); // time the history was loaded
+  const grantOf = (p: Purchase) => one(p.network_authorizations);
   const paid = list.filter((p) => p.status === 'paid');
-  const amountOf = (p: (typeof list)[number]) =>
+  const amountOf = (p: Purchase) =>
     p.amount_paid !== null && p.amount_paid !== undefined ? Number(p.amount_paid) : Number(p.amount_kobo ?? 0) / 100 || Number(p.net_amount_ngn || 0);
   const totalSpent = paid.reduce((acc, p) => acc + amountOf(p), 0);
   // A plan is current only if its end time is ahead and it was not revoked.

@@ -38,6 +38,19 @@ export async function getAdminUser(): Promise<User | null> {
 }
 
 /**
+ * For admin pages still rendered on the server: the admin layout is now a
+ * static file, so each such page checks the caller itself.
+ */
+export async function requireAdminPage(): Promise<User> {
+  const user = await getAdminUser();
+  if (!user) {
+    const { redirect } = await import('next/navigation');
+    redirect('/login');
+  }
+  return user as User;
+}
+
+/**
  * For route handlers: returns a 401 response when the caller is not an admin,
  * or null when the request may continue.
  */

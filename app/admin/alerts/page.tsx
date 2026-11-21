@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import { loadAlerts } from '@/lib/admin/alerts';
 import AlertsPanel from '../components/alerts-panel';
 import { PageHeader } from '@/components/admin/page-header';
@@ -5,6 +6,7 @@ import { PageHeader } from '@/components/admin/page-header';
 export const dynamic = 'force-dynamic';
 
 export default async function AlertsPage() {
+  await requireAdminPage();
   const alerts = await loadAlerts();
   return (
     <div className="space-y-6">

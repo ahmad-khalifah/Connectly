@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import { db } from '@/lib/db/client';
 import { adminEmails } from '@/lib/auth/admin-emails';
 import SmsTestCard from './sms-test-card';
@@ -10,6 +11,7 @@ import { Notice } from '@/components/ui/notice';
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
+  await requireAdminPage();
   const { data: ns, error } = await db.from('network_settings').select('portal_url, walled_garden_hosts').maybeSingle();
   const admins = adminEmails();
 

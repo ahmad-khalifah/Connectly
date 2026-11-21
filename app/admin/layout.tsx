@@ -1,14 +1,8 @@
-import { redirect } from 'next/navigation';
-import { getAdminUser } from '@/lib/auth/admin';
-import AdminShell from './admin-shell';
-import { appEnv } from '@/lib/env';
+import { AdminFrame } from '@/components/admin/admin-frame';
 
-export const dynamic = 'force-dynamic';
-
-// Server-side admin check for every /admin page, in addition to proxy.ts.
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await getAdminUser();
-  if (!user) redirect('/login');
-
-  return <AdminShell operatorEmail={user.email ?? ''} environment={appEnv()}>{children}</AdminShell>;
+// Static: the sign-in check runs in the browser (AdminFrame) and on the
+// server for every data request (lib/http/admin-api.ts, lib/auth/request-admin.ts).
+// Pages still rendered on the server also check (requireAdminPage).
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return <AdminFrame>{children}</AdminFrame>;
 }

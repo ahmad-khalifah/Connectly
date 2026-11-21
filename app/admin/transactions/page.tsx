@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import ReconcileButton from './reconcile-button';
@@ -42,6 +43,7 @@ const FILTERS = [
 const PER_PAGE = 30;
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ page?: string; search?: string; status?: string }> }) {
+  await requireAdminPage();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const status = FILTERS.some((f) => f.id === sp.status) ? sp.status ?? '' : '';

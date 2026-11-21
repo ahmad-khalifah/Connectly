@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import { db } from '@/lib/db/client';
 import { fetchAll } from '@/lib/db/fetch-all';
 import { paidTotals } from '@/lib/admin/metrics-loader';
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
 const naira = (n: number) => `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 
 export default async function RevenuePage({ searchParams }: { searchParams: Promise<{ period?: string; location?: string }> }) {
+  await requireAdminPage();
   const sp = await searchParams;
   const period: Period = isPeriod(sp.period) ? sp.period : '30d';
   const locationId = isUuid(sp.location) ? sp.location : null;

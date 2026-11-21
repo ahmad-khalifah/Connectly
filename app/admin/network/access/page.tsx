@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import { isUuid } from '@/lib/admin/inputs';
@@ -38,6 +39,7 @@ function pageTime(): number {
 }
 
 export default async function AccessPage({ searchParams }: { searchParams: Promise<Search> }) {
+  await requireAdminPage();
   const sp = await searchParams;
   const status = (GRANT_STATUSES as readonly string[]).includes(sp.status ?? '') ? sp.status! : '';
   const routerId = isUuid(sp.router) ? sp.router! : '';

@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import RouterForm from '../../router-form';
@@ -7,6 +8,7 @@ import { Notice } from '@/components/ui/notice';
 export const dynamic = 'force-dynamic';
 
 export default async function NewRouterPage() {
+  await requireAdminPage();
   const { data: locations } = await db.from('locations').select('id, name').eq('is_active', true).order('name');
   return (
     <div className="space-y-6">

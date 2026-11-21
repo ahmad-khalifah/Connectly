@@ -37,45 +37,67 @@ export async function paidTotals(a: PaidArgs): Promise<PaidBucket[]> {
 
 const revenueOf = (b: PaidBucket[]) => Math.round(b.reduce((s, x) => s + x.revenue, 0) * 100) / 100;
 
-/** Fetches what computeMetrics needs for one period and location. Throws on a database error. */
-export async function loadMetricInput(period: Period, locationId: string | null, now: Date): Promise<MetricInput> {
+export type PaidPart = Pick<MetricInput, 'paid' | 'windows'>;
+export type PeoplePart = Pick<MetricInput, 'grants' | 'customers' | 'expenses'>;
+export type NetworkPart = Pick<MetricInput, 'routers' | 'jobs' | 'locations' | 'controllerLive' | 'sessions'>;
+
+/**
+ * The dashboard's figures come in three parts, so each request stays small
+ * (on Cloudflare Workers Free each request has 10 ms of CPU, roughly one
+ * millisecond per database call). loadMetricInput joins them.
+ */
+export async function loadPaidPart(period: Period, locationId: string | null, now: Date): Promise<PaidPart> {
   const { from, to } = periodRange(period, now);
   const window = (p: Period) => paidTotals({ from: periodRange(p, now).from, to: now, locationId }).then(revenueOf);
-
-  const [paid, today, last7, month, allTime, grantRows, customerRows, expenses, routers, jobs, locations, heartbeat, sessions] = await Promise.all([
+  const [paid, today, last7, month, allTime] = await Promise.all([
     paidTotals({ from, to, locationId, unit: period === 'all' ? 'month' : 'day' }),
     window('today'),
     window('7d'),
     window('month'),
     window('all'),
+  ]);
+  return { paid, windows: { today, last7, month, all: allTime } satisfies RevenueWindows };
+}
+
+export async function loadPeoplePart(period: Period, locationId: string | null, now: Date): Promise<PeoplePart> {
+  const { from, to } = periodRange(period, now);
+  const [grantRows, customerRows, expenses] = await Promise.all([
     rpc<Record<string, unknown>[]>('admin_grant_counts', { p_from: from?.toISOString() ?? null, p_to: to.toISOString(), p_now: now.toISOString(), p_location: locationId }),
     rpc<Record<string, unknown>[]>('admin_customer_counts', { p_from: from?.toISOString() ?? null, p_to: to.toISOString() }),
     all((f, t) => db.from('expenses').select('amount_ngn, expense_date, location_id').order('expense_date').range(f, t)),
+  ]);
+  const g = grantRows?.[0] ?? {};
+  const c = customerRows?.[0] ?? {};
+  const grants: GrantCounts = { running: n(g.running), customersOnPlans: n(g.customers_on_plans), ended: n(g.ended), endedEarly: n(g.ended_early) };
+  const customers: CustomerCounts = { registered: n(c.registered), newCustomers: n(c.new_customers) };
+  return { grants, customers, expenses: expenses as MetricInput['expenses'] };
+}
+
+export async function loadNetworkPart(now: Date): Promise<NetworkPart> {
+  const [routers, jobs, locations, heartbeat, sessions] = await Promise.all([
     all<{ id: string; status: string | null; lifecycle_status: string; location_id: string | null; last_seen_at: string | null }>((f, t) => db.from('routers').select('id, status, lifecycle_status, location_id, last_seen_at').range(f, t)),
     all<{ status: string; updated_at: string | null; finished_at: string | null; router_id: string }>((f, t) => db.from('controller_jobs').select('status, updated_at, finished_at, router_id').in('status', ['queued', 'running', 'failed', 'dead']).range(f, t)),
     all((f, t) => db.from('locations').select('id, is_active').range(f, t)),
     db.from('controller_instances').select('last_heartbeat_at').order('last_heartbeat_at', { ascending: false }).limit(1),
     all<{ location_id: string | null; last_seen_at: string | null }>((f, t) => db.from('network_sessions').select('location_id, last_seen_at').eq('status', 'active').range(f, t)),
   ]);
-
   const routerLocation = new Map(routers.map((r) => [r.id, r.location_id]));
   const last = (heartbeat.data?.[0] as { last_heartbeat_at?: string } | undefined)?.last_heartbeat_at;
-  const g = grantRows?.[0] ?? {};
-  const c = customerRows?.[0] ?? {};
-  const windows: RevenueWindows = { today, last7, month, all: allTime };
-  const grants: GrantCounts = { running: n(g.running), customersOnPlans: n(g.customers_on_plans), ended: n(g.ended), endedEarly: n(g.ended_early) };
-  const customers: CustomerCounts = { registered: n(c.registered), newCustomers: n(c.new_customers) };
-
   return {
-    paid,
-    windows,
-    grants,
-    customers,
-    expenses: expenses as MetricInput['expenses'],
     routers: routers.map(({ status, lifecycle_status, location_id, last_seen_at }) => ({ status, lifecycle_status, location_id, last_seen_at })),
     jobs: jobs.map((j) => ({ status: j.status, updated_at: j.updated_at, finished_at: j.finished_at, location_id: routerLocation.get(j.router_id) ?? null })),
     locations: locations as MetricInput['locations'],
-    controllerLive: Boolean(last && isControllerLive(last)),
+    controllerLive: Boolean(last && isControllerLive(last, now.getTime())),
     sessions,
   };
+}
+
+/** Fetches what computeMetrics needs for one period and location. Throws on a database error. */
+export async function loadMetricInput(period: Period, locationId: string | null, now: Date): Promise<MetricInput> {
+  const [paid, people, network] = await Promise.all([
+    loadPaidPart(period, locationId, now),
+    loadPeoplePart(period, locationId, now),
+    loadNetworkPart(now),
+  ]);
+  return { ...paid, ...people, ...network };
 }

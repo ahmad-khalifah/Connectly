@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import { db } from '@/lib/db/client';
 import { lagosToday } from '@/lib/admin/inputs';
 import ExpenseForm from './expense-form';
@@ -17,6 +18,7 @@ const naira = (n: number) => `₦${n.toLocaleString('en-NG', { minimumFractionDi
 const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
 export default async function ExpensesPage() {
+  await requireAdminPage();
   const [expensesRes, locationsRes] = await Promise.all([
     db.from('expenses').select('id, category, amount_ngn, description, expense_date, recorded_by, locations(name)').order('expense_date', { ascending: false }).order('created_at', { ascending: false }),
     db.from('locations').select('id, name').order('name'),

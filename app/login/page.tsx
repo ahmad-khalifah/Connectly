@@ -1,18 +1,13 @@
+import { Suspense } from 'react';
 import LoginForm from './login-form';
 
-// proxy.ts redirects signed-in accounts that are not on the admin allow-list
-// here with ?error=not_authorized.
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+// Static page. An account that is signed in but not on the admin allow-list
+// is sent here with ?error=not_authorized (components/admin/admin-frame.tsx,
+// and proxy.ts on hosts that run it); LoginForm reads it in the browser.
+export default function LoginPage() {
   return (
-    <LoginForm
-      initialError={
-        error === 'not_authorized' ? 'This account is not on the admin list. Sign in with an admin account.' : ''
-      }
-    />
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

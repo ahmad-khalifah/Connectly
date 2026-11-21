@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import { PageHeader } from '@/components/admin/page-header';
@@ -29,6 +30,7 @@ function phoneNeedle(q: string): string {
 }
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ page?: string; search?: string }> }) {
+  await requireAdminPage();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const search = (sp.search ?? '').trim();
@@ -99,7 +101,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               <td className={`${td} tnum text-right`}>₦{c.spent.toLocaleString('en-NG')}</td>
               <td className={`${td} text-right`}>
                 {c.customerId ? (
-                  <Link href={`/admin/customers/${c.customerId}`} className="font-semibold text-brand hover:underline">History</Link>
+                  <Link href={`/admin/customer?id=${c.customerId}`} className="font-semibold text-brand hover:underline">History</Link>
                 ) : <span className="text-subtle">No profile</span>}
               </td>
             </tr>

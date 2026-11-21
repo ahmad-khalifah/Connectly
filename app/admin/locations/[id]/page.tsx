@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { db } from '@/lib/db/client';
@@ -24,6 +25,7 @@ const uptime = (s: number | null) => {
 };
 
 export default async function LocationDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const { id } = await params;
   if (!isUuid(id)) notFound();
 

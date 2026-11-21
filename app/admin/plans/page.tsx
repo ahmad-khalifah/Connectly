@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import { paidTotals } from '@/lib/admin/metrics-loader';
@@ -13,6 +14,7 @@ import { Notice } from '@/components/ui/notice';
 export const dynamic = 'force-dynamic';
 
 export default async function PlansPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+  await requireAdminPage();
   const { show } = await searchParams;
   const showArchived = show === 'all';
 

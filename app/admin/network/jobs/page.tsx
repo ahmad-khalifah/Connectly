@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import { isUuid } from '@/lib/admin/inputs';
@@ -16,6 +17,7 @@ type Search = { status?: string; kind?: string; router?: string; page?: string }
 const STATUS_WORD: Record<string, string> = { queued: 'Queued', running: 'Running', succeeded: 'Succeeded', failed: 'Retrying', dead: 'Gave up' };
 
 export default async function JobsPage({ searchParams }: { searchParams: Promise<Search> }) {
+  await requireAdminPage();
   const sp = await searchParams;
   const status = (JOB_STATUSES as readonly string[]).includes(sp.status ?? '') ? sp.status! : '';
   const kind = (JOB_KINDS as readonly string[]).includes(sp.kind ?? '') ? sp.kind! : '';

@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import LocationForm from '../location-form';
@@ -6,6 +7,7 @@ import { PageHeader } from '@/components/admin/page-header';
 export const dynamic = 'force-dynamic';
 
 export default async function NewLocationPage() {
+  await requireAdminPage();
   const { data: institutions } = await db.from('institutions').select('id, name').order('name');
   return (
     <div className="space-y-6">

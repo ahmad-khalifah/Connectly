@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Check } from 'lucide-react';
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils';
 export const dynamic = 'force-dynamic';
 
 export default async function RouterDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const { id } = await params;
   if (!isUuid(id)) notFound();
 

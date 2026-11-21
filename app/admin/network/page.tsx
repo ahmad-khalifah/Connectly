@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import { isControllerLive } from '@/lib/network/jobs';
@@ -20,6 +21,7 @@ type RouterRow = {
 };
 
 export default async function RoutersPage() {
+  await requireAdminPage();
   const [routersRes, instancesRes, settingsRes, jobsRes, alerts] = await Promise.all([
     db.from('routers')
       .select('id, name, identifier, lifecycle_status, status, connection_method, tunnel_ip, management_ip, last_seen_at, last_test_at, last_test_result, locations(name)')

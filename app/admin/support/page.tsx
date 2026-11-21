@@ -1,3 +1,4 @@
+import { requireAdminPage } from '@/lib/auth/admin';
 import Link from 'next/link';
 import { db } from '@/lib/db/client';
 import TicketStatus from './ticket-status';
@@ -22,6 +23,7 @@ const FILTERS = [
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
 export default async function SupportPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
+  await requireAdminPage();
   const { show } = await searchParams;
   const filter = FILTERS.some((f) => f.id === show) ? show! : 'active';
 
