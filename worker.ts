@@ -11,7 +11,9 @@
 //     likewise (lib/http/admin-api.ts), each request checked for an admin;
 //   * the admin's save and edit actions (lib/http/admin-routes.ts), which
 //     check the caller themselves;
-//   * GET /api/cron/sms-reminders (lib/http/cron.ts), behind CRON_SECRET.
+//   * GET /api/cron/sms-reminders (lib/http/cron.ts), behind CRON_SECRET;
+//   * POST /api/router/agent/sync (lib/http/router-agent.ts), the routers' own
+//     poll, behind a per-router token.
 // Everything else goes to the Next.js worker built by OpenNext.
 //
 // The Cron Trigger in wrangler.jsonc calls `scheduled` once a minute for one
@@ -33,6 +35,7 @@ import { customerApiRoute } from './lib/http/customer-api';
 import { adminApiRoute } from './lib/http/admin-api';
 import { adminActionRoute } from './lib/http/admin-routes';
 import { cronRoute, runScheduled } from './lib/http/cron';
+import { routerAgentRoute } from './lib/http/router-agent';
 import { applyWorkerEnv } from './lib/http/worker-env';
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -46,6 +49,7 @@ const frontDoor = {
     const { pathname } = new URL(request.url);
     const handler =
       customerApiRoute(request.method, pathname) ??
+      routerAgentRoute(request.method, pathname) ??
       adminApiRoute(request.method, pathname) ??
       adminActionRoute(request.method, pathname) ??
       cronRoute(request.method, pathname);
