@@ -16,7 +16,7 @@ other paid bindings.
 | `npm run cf:preview` | Builds, then serves it locally on the Workers runtime |
 | `npm run cf:size` | Builds and prints the upload size; must stay under 3 MB gzip (free limit) |
 
-Measured on 21 Nov 2026: 2.0 MB gzip (with the front door).
+Measured on 21 Nov 2026: 1.9 MB gzip.
 
 Deploy with Wrangler directly: `npx wrangler deploy --env=""` for staging,
 `npx wrangler deploy --env production` for production.
@@ -86,8 +86,17 @@ customer path never renders on the server:
   and the old `/status` link itself with `lib/http/customer-api.ts`, and passes
   every other request to the Next.js worker. The Next.js routes for the same
   paths use the same handlers, so local dev and Vercel behave identically.
+- The public home page and `/wifi` are served as files the same way.
+- The server's database client is PostgREST only (`lib/db/client.ts`), not
+  the full supabase-js client, whose sign-in and realtime set-up cost CPU on
+  every new Worker instance. Korapay's webhook arrives from abroad and
+  usually starts a new instance (12 and 24 ms with the full client).
 - The staging banner is decided in the browser from the address
   (`components/env-banner.tsx`), since a static file is built once.
+
+After the change (staging, 21 Nov 2026): `/api/portal` 2–7 ms,
+`/api/purchase/status` 3–8 ms, `/api/checkout` 4 ms (14 ms on a new
+instance), customer pages 0 (not run). Webhook: to be re-measured.
 
 The admin still renders per request and is the next part to move (same
 approach: static pages plus small JSON handlers).

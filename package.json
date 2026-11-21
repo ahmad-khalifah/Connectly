@@ -16,6 +16,7 @@
     "cf:size": "npm run cf:build && wrangler deploy --dry-run --outdir .open-next/dry-run"
   },
   "dependencies": {
+    "@supabase/postgrest-js": "2.114.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.114.0",
     "clsx": "^2.1.1",
