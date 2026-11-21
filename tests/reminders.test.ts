@@ -160,3 +160,16 @@ describe('legacy router code is gone', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('scheduled runs see the same settings as requests', () => {
+  it('Worker secrets and variables, then the built public settings, without overwriting', async () => {
+    const { applyWorkerEnv } = await import('@/lib/http/worker-env');
+    const target: Record<string, string | undefined> = {};
+    applyWorkerEnv(
+      { SUPABASE_SERVICE_ROLE_KEY: 'secret', APP_ENV: 'preview', ASSETS: { fetch() {} } },
+      { production: { NEXT_PUBLIC_SUPABASE_URL: 'https://x.supabase.co', APP_ENV: 'built' }, development: { NEXT_PUBLIC_SUPABASE_URL: 'dev' } },
+      target
+    );
+    expect(target).toEqual({ SUPABASE_SERVICE_ROLE_KEY: 'secret', APP_ENV: 'preview', NEXT_PUBLIC_SUPABASE_URL: 'https://x.supabase.co' });
+  });
+});
