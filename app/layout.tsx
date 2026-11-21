@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'Connectly Networks',
+  // A plain file in public/: Cloudflare serves it without running the Worker
+  // (as app/icon.svg it was generated per request, 9-13 ms of CPU each time).
+  icons: { icon: { url: '/icon.svg', type: 'image/svg+xml' } },
   description: 'Connectly Networks designs, installs and runs paid WiFi for markets, campuses, hostels and estates in Northern Nigeria.',
   keywords: ['managed WiFi', 'paid WiFi', 'hotspot', 'Abuja', 'Northern Nigeria', 'internet connectivity'],
   openGraph: {

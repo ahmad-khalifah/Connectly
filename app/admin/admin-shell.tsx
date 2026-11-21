@@ -67,14 +67,15 @@ export default function AdminShell({
 }: {
   children: React.ReactNode;
   operatorEmail: string;
-  environment: 'production' | 'preview' | 'development';
+  /** null until the server has answered which environment this is. */
+  environment: 'production' | 'preview' | 'development' | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const active = activeHref(pathname);
 
-  const envLabel = environment === 'production' ? 'Production' : environment === 'preview' ? 'Staging' : 'Local';
+  const envLabel = environment === 'production' ? 'Production' : environment === 'preview' ? 'Staging' : environment ? 'Local' : null;
 
   const nav = (
     <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5" aria-label="Admin">
@@ -128,15 +129,17 @@ export default function AdminShell({
   const brand = (
     <div className="flex items-center justify-between gap-2">
       <Link prefetch={false} href="/admin" aria-label="Connectly admin home"><Wordmark /></Link>
-      <span
-        className={cn(
-          'rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset',
-          environment === 'production' ? 'bg-ok-soft text-ok ring-ok/20' : 'bg-warn-soft text-warn ring-warn/20'
-        )}
-        title="Which database and payment keys this console uses"
-      >
-        {envLabel}
-      </span>
+      {envLabel && (
+        <span
+          className={cn(
+            'rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset',
+            environment === 'production' ? 'bg-ok-soft text-ok ring-ok/20' : 'bg-warn-soft text-warn ring-warn/20'
+          )}
+          title="Which database and payment keys this console uses"
+        >
+          {envLabel}
+        </span>
+      )}
     </div>
   );
 

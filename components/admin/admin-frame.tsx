@@ -1,14 +1,15 @@
 'use client';
 
-// The admin console's frame. The pages are static files, so the sign-in
-// check happens here in the browser first (a current session, and the
-// server confirming this account is an admin), and again on the server for
-// every data request.
+// The admin console's frame. The pages are static files with no data in
+// them; every request for data is checked on the server. To keep pages fast,
+// the frame and the page's own data requests start together: the frame asks
+// who is signed in (for the name and environment shown in the menu), and
+// sends anyone signed out to /login and an account not on the admin list to
+// /login?error=not_authorized.
 
 import { useEffect, useState } from 'react';
 import AdminShell from '@/app/admin/admin-shell';
-import { freshSession } from '@/lib/auth/browser';
-import { adminFetch, Loading } from './admin-data';
+import { adminFetch, ensureSession } from './admin-data';
 
 type Me = { email: string; environment: 'production' | 'preview' | 'development' };
 
@@ -19,19 +20,14 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!(await freshSession())) {
+      if (!(await ensureSession())) {
         // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.assign('/login');
         return;
       }
+      // adminFetch sends a signed-out caller (401) or a non-admin (403) to sign-in.
       const res = await adminFetch('/api/admin/me');
-      if (cancelled || res.status === 401) return;
-      if (res.status === 403) {
-        // Signed in, but not on the admin list.
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-        window.location.assign('/login?error=not_authorized');
-        return;
-      }
+      if (cancelled || res.status === 401 || res.status === 403) return;
       if (!res.ok) {
         setFailed(true);
         return;
@@ -48,12 +44,5 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
       </main>
     );
   }
-  if (!me) {
-    return (
-      <main className="flex min-h-screen flex-1 items-center justify-center bg-canvas">
-        <Loading label="Checking your sign-in" />
-      </main>
-    );
-  }
-  return <AdminShell operatorEmail={me.email} environment={me.environment}>{children}</AdminShell>;
+  return <AdminShell operatorEmail={me?.email ?? ''} environment={me?.environment ?? null}>{children}</AdminShell>;
 }

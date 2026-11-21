@@ -18,11 +18,26 @@ function toLogin() {
   window.location.assign('/login');
 }
 
-/** GET an admin data URL; on an expired session refresh it once, then send to sign-in. */
+// One check per page load that the session cookie holds a current token
+// (refreshing an expired one), shared by every request the page makes at
+// once, so they do not each try to refresh it.
+let sessionReady: Promise<boolean> | null = null;
+export function ensureSession(): Promise<boolean> {
+  sessionReady ??= freshSession().catch(() => false);
+  return sessionReady;
+}
+
+/** An admin request; on an expired session refresh it once, then send to sign-in. */
 export async function adminFetch(input: string, init?: RequestInit): Promise<Response> {
+  await ensureSession();
   let res = await fetch(input, { cache: 'no-store', ...init });
   if (res.status === 401 && (await freshSession(true))) res = await fetch(input, { cache: 'no-store', ...init });
   if (res.status === 401) toLogin();
+  if (res.status === 403) {
+    const body = (await res.clone().json().catch(() => null)) as { reason?: string } | null;
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    if (body?.reason === 'not_admin') window.location.assign('/login?error=not_authorized');
+  }
   return res;
 }
 
@@ -56,7 +71,7 @@ export function useAdminView<T>(url: string | null): { loaded: Loaded<T>; reload
     let cancelled = false;
     adminFetch(url)
       .then(async (res) => {
-        if (cancelled || res.status === 401) return;
+        if (cancelled || res.status === 401 || res.status === 403) return;
         if (res.status === 404) return setLoaded({ state: 'not_found' });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) return setLoaded({ state: 'error', message: (body as { message?: string }).message ?? `Error ${res.status}` });

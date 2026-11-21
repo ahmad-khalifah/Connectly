@@ -236,3 +236,18 @@ describe('admin page data', () => {
     await expect(routerView(new URLSearchParams({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }))).rejects.toBeInstanceOf(NotFound);
   });
 });
+
+describe('a signed-in account that is not an admin', () => {
+  it('gets 403 "not_admin" from data requests and actions, so the browser can say why', async () => {
+    authFetch.mockResolvedValue(user('someone@example.com'));
+    const headers = { cookie: cookie(session(TOKEN)), 'content-type': 'application/json' };
+    const { handleAdminView } = await import('@/lib/http/admin-api');
+    const view = await handleAdminView(req('/api/admin/view/settings', headers));
+    expect(view.status).toBe(403);
+    expect(await view.json()).toMatchObject({ reason: 'not_admin' });
+    const { adminActionRoute } = await import('@/lib/http/admin-routes');
+    const action = await adminActionRoute('POST', '/api/admin/plans')!(req('/api/admin/plans', headers, { method: 'POST', body: '{}' }));
+    expect(action.status).toBe(403);
+    expect(fake.ops).toEqual([]);
+  });
+});

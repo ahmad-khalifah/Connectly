@@ -11,7 +11,8 @@
 
 import { db } from '@/lib/db/client';
 import { appEnv } from '@/lib/env';
-import { adminFromRequest, checkAdmin, type RequestAdmin } from '@/lib/auth/request-admin';
+import { checkAdmin, type RequestAdmin } from '@/lib/auth/request-admin';
+import { refusal } from '@/lib/auth/admin';
 import { isUuid } from '@/lib/admin/inputs';
 import { isPeriod, type Period } from '@/lib/admin/metrics';
 import { loadNetworkPart, loadPaidPart, loadPeoplePart } from '@/lib/admin/metrics-loader';
@@ -103,10 +104,9 @@ export const ADMIN_VIEWS: Record<string, View> = {
  * uses. 401 when signed out; 403 for an account not on the admin list.
  */
 export async function handleAdminMe(request: Request): Promise<Response> {
-  const { admin, reason } = await checkAdmin(request);
-  if (reason === 'not_admin') return json({ message: 'Not an admin account' }, 403);
-  if (!admin) return json({ message: 'Unauthorized' }, 401);
-  return json({ email: admin.email, environment: appEnv() });
+  const check = await checkAdmin(request);
+  if (!check.admin) return refusal(check);
+  return json({ email: check.admin.email, environment: appEnv() });
 }
 
 /** GET /api/admin/view/<name>?...: one admin page's data (or one part of it). */
@@ -115,10 +115,10 @@ export async function handleAdminView(request: Request): Promise<Response> {
   const name = url.pathname.replace(/^\/api\/admin\/view\//, '').replace(/\/+$/, '');
   const view = Object.hasOwn(ADMIN_VIEWS, name) ? ADMIN_VIEWS[name] : null;
   if (!view) return json({ message: 'Not found' }, 404);
-  const admin = await adminFromRequest(request);
-  if (!admin) return json({ message: 'Unauthorized' }, 401);
+  const check = await checkAdmin(request);
+  if (!check.admin) return refusal(check);
   try {
-    return json(await view(url.searchParams, admin));
+    return json(await view(url.searchParams, check.admin));
   } catch (error) {
     if (error instanceof NotFound) return json({ message: 'Not found' }, 404);
     console.error('[ADMIN_VIEW]', name, error);
@@ -134,8 +134,8 @@ export async function handleAdminView(request: Request): Promise<Response> {
 export async function handleAdminSweep(request: Request): Promise<Response> {
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return json({ message: 'Request refused.' }, 403);
-  const admin = await adminFromRequest(request);
-  if (!admin) return json({ message: 'Unauthorized' }, 401);
+  const check = await checkAdmin(request);
+  if (!check.admin) return refusal(check);
   return json(await reconcileRecentPending({ limit: 2 }));
 }
 
