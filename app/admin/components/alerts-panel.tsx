@@ -23,7 +23,7 @@ export default function AlertsPanel({ alerts, quietText = 'No problems found.' }
         const { cls, Icon } = TONE[a.severity];
         return (
           <li key={a.title}>
-            <Link href={a.href} className={cn('flex items-start gap-3 rounded-[var(--radius-control)] border p-3.5 text-sm transition-colors hover:brightness-[0.98]', cls)}>
+            <Link prefetch={false} href={a.href} className={cn('flex items-start gap-3 rounded-[var(--radius-control)] border p-3.5 text-sm transition-colors hover:brightness-[0.98]', cls)}>
               <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <span className="min-w-0">
                 <span className="font-semibold">{a.title}</span>

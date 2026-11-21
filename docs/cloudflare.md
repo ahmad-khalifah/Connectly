@@ -16,7 +16,7 @@ other paid bindings.
 | `npm run cf:preview` | Builds, then serves it locally on the Workers runtime |
 | `npm run cf:size` | Builds and prints the upload size; must stay under 3 MB gzip (free limit) |
 
-Measured on 21 Nov 2026: 1.9 MB gzip.
+Measured on 21 Nov 2026: 1.5 MB gzip.
 
 Deploy with Wrangler directly: `npx wrangler deploy --env=""` for staging,
 `npx wrangler deploy --env production` for production.
@@ -70,7 +70,7 @@ this design:
 | Request | CPU |
 | --- | --- |
 | Prerendered page (home), static files | 2–10 ms |
-| `/admin` redirect (Proxy only) | 2 ms |
+| `/admin` redirect (Proxy only, since removed) | 2 ms |
 | Pages rendered per request (`/connect`, `/success`, `/login`) | 19–55 ms warm, 110–260 ms on a new isolate |
 
 Waiting for the database does not count; rendering React does. So the
@@ -105,18 +105,41 @@ customer path never renders on the server:
 
 After the change (staging, 21 Nov 2026): `/api/portal` 2–7 ms,
 `/api/purchase/status` 3–8 ms, `/api/checkout` 4 ms (14 ms on a new
-instance), customer pages 0 (not run). Webhook 12 ms with the SMS; to be
-re-measured without it.
+instance), customer pages 0 (not run), webhook 5 ms (12–24 ms with the SMS).
 
-The admin still renders per request and is the next part to move (same
-approach: static pages plus small JSON handlers).
+## The admin console
+
+Same approach as the customer pages:
+
+- Every admin page is a static file with no data in it
+  (`scripts/cf-static-pages.mjs` copies them and fails the build if one is
+  rendered per request). Detail pages take `?id=`: `/admin/customer`,
+  `/admin/plan`, `/admin/location`, `/admin/location/edit`,
+  `/admin/network/router`, `/admin/network/router/edit`. Old addresses
+  (`/admin/plans/<id>` and so on) redirect (308).
+- Each page asks `GET /api/admin/view/<name>` for its data
+  (`lib/http/admin-api.ts`, loaders in `lib/admin/views.ts`). Pages with many
+  figures (dashboard, controller jobs) ask for several small parts at once,
+  each about eight database calls or fewer.
+- Saves and actions (`app/api/admin/**/route.ts`) are plain Fetch handlers.
+  The front door runs them directly (`lib/http/admin-routes.ts`) and refuses
+  requests from another site's page.
+- Sign-in: every data request and action checks the Supabase Auth session
+  cookie with Supabase Auth (`GET /auth/v1/user`, cached for a minute per
+  token) and the `ADMIN_EMAILS` allow-list (`lib/auth/request-admin.ts`). The
+  browser refreshes an expired session and sends signed-out users to
+  `/login`, accounts not on the list to `/login?error=not_authorized`.
+- `proxy.ts` (Next.js middleware) was removed. OpenNext's middleware bundle
+  could not read cookies (`cookie.parse` missing: error 1101 on any signed-in
+  admin request), and every admin route now checks the caller itself.
+- Links do not prefetch: a prefetch is a Worker request (counted in the
+  daily allowance) for a page that may never be opened.
+
+Still through Next.js: `/api/cron/sms-reminders` (moves with the scheduled
+jobs) and the old redirect pages `/admin/apis`, `/admin/reports`, `/admin/usage`.
 
 ## Known warnings (expected)
 
-- `Node.js middleware support is experimental in cloudflare`: the admin gate
-  (`proxy.ts`) uses Node.js middleware. It ran correctly in a local Workers
-  preview (`/admin` redirects to sign-in). The admin layout and every admin API
-  route check the user again, so the gate is not the only protection.
 - `StaticAssetsIncrementalCache: Failed to set to read-only cache`: Next.js
   tries to store a rendered page; the cache is read-only by design. Harmless.
 

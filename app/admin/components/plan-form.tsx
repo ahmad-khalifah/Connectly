@@ -7,6 +7,7 @@ import { Field, inputClass, selectClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { naira, planData, planDevices, planDuration, planSpeed } from '@/lib/plan-format';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 type LocationOption = { id: string; name: string; is_active: boolean | null };
 
@@ -67,7 +68,7 @@ export default function PlanForm(props: Props) {
       isActive: form.isActive,
     };
     try {
-      const res = await fetch(props.mode === 'edit' ? `/api/admin/plans/${props.planId}` : '/api/admin/plans', {
+      const res = await adminFetch(props.mode === 'edit' ? `/api/admin/plans/${props.planId}` : '/api/admin/plans', {
         method: props.mode === 'edit' ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -75,7 +76,7 @@ export default function PlanForm(props: Props) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'The plan was not saved.');
       router.push('/admin/plans');
-      router.refresh();
+      refreshAdminData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The plan was not saved.');
       setLoading(false);

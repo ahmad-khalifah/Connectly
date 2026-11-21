@@ -32,5 +32,5 @@ export function Button({ variant, size, full, className, type = 'button', ...res
 type LinkProps = React.ComponentProps<typeof Link> & { variant?: Variant; size?: Size; full?: boolean };
 
 export function ButtonLink({ variant, size, full, className, ...rest }: LinkProps) {
-  return <Link className={buttonClass({ variant, size, full, className })} {...rest} />;
+  return <Link prefetch={false} className={buttonClass({ variant, size, full, className })} {...rest} />;
 }

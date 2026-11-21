@@ -5,14 +5,7 @@
 
 import { db } from '@/lib/db/client';
 
-export const GRANT_STATUSES = ['pending_device', 'active', 'revoked', 'expired'] as const;
-
-export const GRANT_LABELS: Record<string, string> = {
-  pending_device: 'Waiting for router',
-  active: 'On router',
-  revoked: 'Revoked',
-  expired: 'Expired',
-};
+export { GRANT_STATUSES, GRANT_LABELS } from './labels';
 
 export type RevokeResult =
   | { ok: true; jobId: string; created: boolean }

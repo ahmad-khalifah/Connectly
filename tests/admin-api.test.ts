@@ -148,3 +148,91 @@ describe('admin data requests', () => {
     expect(res.headers.get('location')).toBe(`https://admin.example/admin/customer?id=${id}`);
   });
 });
+
+describe('admin save and edit actions in the front door', () => {
+  const signedIn = { cookie: cookie(session(TOKEN)), 'content-type': 'application/json' };
+
+  it('routes each action with its ids, and leaves unknown paths to Next.js', async () => {
+    const { adminActionRoute } = await import('@/lib/http/admin-routes');
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    for (const [m, p] of [
+      ['POST', '/api/admin/expenses'], ['DELETE', `/api/admin/expenses/${id}`], ['POST', '/api/admin/locations'], ['PATCH', `/api/admin/locations/${id}`],
+      ['POST', `/api/admin/network/access/${id}/resend`], ['POST', `/api/admin/network/access/${id}/revoke`], ['POST', `/api/admin/network/jobs/${id}/retry`],
+      ['POST', '/api/admin/network/routers'], ['PATCH', `/api/admin/network/routers/${id}`], ['POST', `/api/admin/network/routers/${id}/test`],
+      ['PUT', `/api/admin/network/routers/${id}/hotspot`], ['PUT', '/api/admin/network/settings'], ['POST', '/api/admin/payments/reconcile'],
+      ['POST', '/api/admin/plans'], ['PATCH', `/api/admin/plans/${id}`], ['DELETE', `/api/admin/plans/${id}`], ['POST', '/api/admin/sms/test'], ['PATCH', `/api/admin/support/${id}`],
+    ]) expect(adminActionRoute(m, p), `${m} ${p}`).not.toBeNull();
+    expect(adminActionRoute('POST', '/api/admin/nothing')).toBeNull();
+    expect(adminActionRoute('GET', '/api/cron/sms-reminders')).toBeNull();
+    const wrongMethod = adminActionRoute('GET', '/api/admin/plans');
+    expect((await wrongMethod!(req('/api/admin/plans'))).status).toBe(405);
+  });
+
+  it('refuses a signed-out caller and another site’s page before doing anything', async () => {
+    const { adminActionRoute } = await import('@/lib/http/admin-routes');
+    const run = adminActionRoute('POST', '/api/admin/plans')!;
+    const out = await run(req('/api/admin/plans', { 'content-type': 'application/json' }, { method: 'POST', body: '{}' }));
+    expect(out.status).toBe(401);
+    const foreign = await run(req('/api/admin/plans', { ...signedIn, origin: 'https://evil.example' }, { method: 'POST', body: '{}' }));
+    expect(foreign.status).toBe(403);
+    expect(fake.ops).toEqual([]);
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('runs the action for an admin, with the id from the address', async () => {
+    authFetch.mockResolvedValue(user('connectly.hq@outlook.com'));
+    fake = createFakeDb((op) => (op.table === 'plans' ? { data: [{ id: 'p', name: 'Day' }], error: null } : { data: null, error: null }));
+    const { adminActionRoute } = await import('@/lib/http/admin-routes');
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const res = await adminActionRoute('PATCH', `/api/admin/plans/${id}`)!(req(`/api/admin/plans/${id}`, signedIn, { method: 'PATCH', body: JSON.stringify({ isActive: false }) }));
+    expect(res.status).toBe(200);
+    const update = fake.ops.find((o) => o.table === 'plans' && o.action === 'update');
+    expect(update?.values).toEqual({ is_active: false });
+    expect(update?.filters).toContainEqual(['id', id]);
+    expect(fake.ops.find((o) => o.table === 'activity_logs')?.values).toMatchObject({ event_type: 'plan.archived', metadata: { operator: 'connectly.hq@outlook.com' } });
+  });
+
+  it('sends every old detail address to its new page', async () => {
+    const { movedAdminPage } = await import('@/lib/http/admin-api');
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    expect(movedAdminPage(`/admin/customers/${id}`)).toBe(`/admin/customer?id=${id}`);
+    expect(movedAdminPage(`/admin/plans/${id}`)).toBe(`/admin/plan?id=${id}`);
+    expect(movedAdminPage(`/admin/locations/${id}`)).toBe(`/admin/location?id=${id}`);
+    expect(movedAdminPage(`/admin/locations/${id}/edit`)).toBe(`/admin/location/edit?id=${id}`);
+    expect(movedAdminPage(`/admin/network/routers/${id}`)).toBe(`/admin/network/router?id=${id}`);
+    expect(movedAdminPage(`/admin/network/routers/${id}/edit/`)).toBe(`/admin/network/router/edit?id=${id}`);
+    expect(movedAdminPage('/admin/plans/new')).toBeNull();
+    expect(movedAdminPage('/admin/network/routers/new')).toBeNull();
+  });
+});
+
+describe('admin page data', () => {
+  it('counts a location’s paid purchases, not its revenue buckets', async () => {
+    fake = createFakeDb((op) => {
+      if (op.table === 'locations') return { data: { id: 'l', name: 'Hub', slug: 'hub', building: null, address: null, is_active: true, institutions: null }, error: null };
+      if (op.table === 'routers') return { data: [{ id: 'r1', lifecycle_status: 'active' }], error: null };
+      if (op.table === 'network_authorizations') return { data: null, count: 2, error: null } as never;
+      return { data: [], error: null };
+    }, () => ({ data: [{ bucket: null, location_id: null, plan_id: null, payments: 14, revenue: 2100, fees: 29.39, failed: 3 }], error: null }));
+    const { locationView } = await import('@/lib/admin/views');
+    const d = await locationView(new URLSearchParams({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }));
+    expect(d.paidPurchases).toBe(14);
+    expect(d.revenue).toBe(2100);
+  });
+
+  it('shows only the last four digits of a paying phone on the access page', async () => {
+    fake = createFakeDb((op) => (op.table === 'network_authorizations'
+      ? { data: [{ id: 'g1', status: 'active', voucher_code: 'K7M2Q9XP', expires_at: '2026-11-22T00:00:00Z', purchases: { id: 'p', reference: 'CONN_x', phone_number: '2348031234567' }, routers: null }], error: null }
+      : { data: [], error: null }));
+    const { accessView } = await import('@/lib/admin/views');
+    const d = await accessView(new URLSearchParams());
+    expect(d.grants[0]).toMatchObject({ phoneLast4: '4567', reference: 'CONN_x' });
+    expect(JSON.stringify(d)).not.toContain('2348031234567');
+  });
+
+  it('answers not found for a malformed or unknown router', async () => {
+    const { routerView, NotFound } = await import('@/lib/admin/views');
+    await expect(routerView(new URLSearchParams({ id: 'x' }))).rejects.toBeInstanceOf(NotFound);
+    await expect(routerView(new URLSearchParams({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }))).rejects.toBeInstanceOf(NotFound);
+  });
+});

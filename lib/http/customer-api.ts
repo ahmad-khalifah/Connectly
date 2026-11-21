@@ -14,6 +14,7 @@ import { verifyWebhookSignature, KorapayConfigError } from '@/lib/payments/korap
 import { reconcilePurchase, sendPaymentConfirmation } from '@/lib/payments/ledger';
 import { initializeKoraCheckout } from '@/lib/payments/checkout';
 import { accessForPurchase, connectLink, hotspotLoginUrl } from '@/lib/network/customer-access';
+import { POST as handleEnquiry } from '@/app/api/enquiries/route';
 
 type Handler = (request: Request) => Promise<Response>;
 
@@ -35,6 +36,7 @@ export function customerApiRoute(method: string, pathname: string): Handler | nu
     'POST /api/purchase/notify': handlePurchaseNotify,
     'POST /api/webhooks/kora': handleKoraWebhook,
     'GET /status': handleOldStatusLink,
+    'POST /api/enquiries': handleEnquiry, // the website's site enquiry form
   };
   return routes[`${method.toUpperCase()} ${pathname.replace(/\/+$/, '') || '/'}`] ?? null;
 }

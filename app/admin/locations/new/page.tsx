@@ -1,19 +1,13 @@
-import { requireAdminPage } from '@/lib/auth/admin';
-import Link from 'next/link';
-import { db } from '@/lib/db/client';
-import LocationForm from '../location-form';
-import { PageHeader } from '@/components/admin/page-header';
+import { Suspense } from 'react';
+import View from './view';
+import { Loading } from '@/components/admin/admin-data';
 
-export const dynamic = 'force-dynamic';
-
-export default async function NewLocationPage() {
-  await requireAdminPage();
-  const { data: institutions } = await db.from('institutions').select('id, name').order('name');
+// New location.
+// Static page; the data loads in the browser from /api/admin/view (lib/admin/views.ts).
+export default function Page() {
   return (
-    <div className="space-y-6">
-      <PageHeader back={<Link href="/admin/locations" className="font-semibold text-muted hover:text-brand">Locations</Link>} title="New location"
-        description="After creating it, register the site's router and choose which plans are sold here." />
-      <LocationForm mode="create" institutions={institutions ?? []} />
-    </div>
+    <Suspense fallback={<Loading />}>
+      <View />
+    </Suspense>
   );
 }

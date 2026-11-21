@@ -1,20 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 /** Take a plan off sale (archive) or put it back. Plans are never deleted. Two steps, no browser dialog. */
 export default function PlanStatusButton({ planId, isActive }: { planId: string; isActive: boolean }) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
   const toggle = async () => {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(`/api/admin/plans/${planId}`, {
+      const res = await adminFetch(`/api/admin/plans/${planId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !isActive }),
@@ -23,7 +22,7 @@ export default function PlanStatusButton({ planId, isActive }: { planId: string;
         const data = await res.json().catch(() => ({}));
         setError(data.message || 'Not changed.');
       } else {
-        router.refresh();
+        refreshAdminData();
       }
     } catch {
       setError('No connection. Try again.');

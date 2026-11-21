@@ -1,101 +1,13 @@
-import { requireAdminPage } from '@/lib/auth/admin';
-import Link from 'next/link';
-import { db } from '@/lib/db/client';
-import TicketStatus from './ticket-status';
-import { PageHeader } from '@/components/admin/page-header';
-import { EmptyRow, lagos, TableFrame, td, th, tr } from '@/components/admin/table';
-import { Badge, type BadgeTone } from '@/components/ui/badge';
-import { Notice } from '@/components/ui/notice';
-import { cn } from '@/lib/utils';
+import { Suspense } from 'react';
+import View from './view';
+import { Loading } from '@/components/admin/admin-data';
 
-export const dynamic = 'force-dynamic';
-
-const STATUS: Record<string, { label: string; tone: BadgeTone }> = {
-  open: { label: 'Open', tone: 'bad' },
-  in_progress: { label: 'In progress', tone: 'warn' },
-  resolved: { label: 'Resolved', tone: 'ok' },
-};
-const FILTERS = [
-  { id: 'active', label: 'Needs attention' },
-  { id: 'resolved', label: 'Resolved' },
-  { id: 'all', label: 'All' },
-];
-const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
-
-export default async function SupportPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
-  await requireAdminPage();
-  const { show } = await searchParams;
-  const filter = FILTERS.some((f) => f.id === show) ? show! : 'active';
-
-  let q = db.from('support_tickets').select('id, ticket_number, category, subject, description, status, assigned_to, created_at, resolved_at, customers(phone_number), locations(name)').order('created_at', { ascending: false }).limit(200);
-  if (filter === 'active') q = q.in('status', ['open', 'in_progress']);
-  if (filter === 'resolved') q = q.eq('status', 'resolved');
-  const { data: tickets, error } = await q;
-
-  // Notes added when a ticket changed status, newest first (kept in the activity log).
-  const ids = (tickets ?? []).map((t) => t.id);
-  const notes = new Map<string, { note: string; at: string }>();
-  if (ids.length) {
-    const { data: logs } = await db.from('activity_logs').select('entity_id, metadata, created_at')
-      .eq('event_type', 'support.status_changed').in('entity_id', ids).order('created_at', { ascending: false }).limit(1000);
-    for (const l of logs ?? []) {
-      const note = (l.metadata as { note?: unknown } | null)?.note;
-      if (typeof note === 'string' && l.entity_id && !notes.has(l.entity_id)) notes.set(l.entity_id, { note, at: l.created_at });
-    }
-  }
-
+// Support: customer problems and website enquiries.
+// Static page; the data loads in the browser from /api/admin/view (lib/admin/views.ts).
+export default function Page() {
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Support"
-        description="Customer problems and enquiries from the website. Site enquiries arrive with their subject starting [WiFi for your site]."
-      />
-      <nav aria-label="Ticket status" className="inline-flex flex-wrap rounded-[var(--radius-control)] border border-line bg-surface p-0.5">
-        {FILTERS.map((f) => (
-          <Link key={f.id} href={f.id === 'active' ? '/admin/support' : `/admin/support?show=${f.id}`} aria-current={f.id === filter ? 'true' : undefined}
-            className={cn('rounded-md px-3 py-1.5 text-[13px] font-semibold', f.id === filter ? 'bg-brand text-white' : 'text-muted hover:bg-canvas hover:text-ink')}>
-            {f.label}
-          </Link>
-        ))}
-      </nav>
-      {error && <Notice tone="bad" title="Tickets could not be loaded">Refresh to try again.</Notice>}
-
-      <TableFrame>
-        <thead>
-          <tr>
-            <th className={th}>Ticket</th><th className={th}>From</th><th className={th}>Subject and message</th>
-            <th className={th}>Received</th><th className={th}>Status</th><th className={th}><span className="sr-only">Actions</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {(tickets ?? []).map((t) => {
-            const st = STATUS[t.status ?? 'open'] ?? STATUS.open;
-            const phone = one(t.customers as { phone_number: string } | { phone_number: string }[] | null)?.phone_number;
-            const loc = one(t.locations as { name: string } | { name: string }[] | null)?.name;
-            return (
-              <tr key={t.id} className={tr}>
-                <td className={`${td} tnum font-semibold`}>#{t.ticket_number}</td>
-                <td className={`${td} text-[13px]`}>{phone ? `+${phone}` : 'Website'}{loc && <span className="block text-muted">{loc}</span>}</td>
-                <td className={`${td} max-w-[460px]`}>
-                  <span className="font-semibold text-ink">{t.subject}</span>
-                  <details className="mt-1 text-[13px] text-muted">
-                    <summary className="cursor-pointer select-none font-semibold text-brand">Show message</summary>
-                    <p className="mt-1 whitespace-pre-wrap leading-relaxed">{t.description}</p>
-                  </details>
-                </td>
-                <td className={`${td} tnum whitespace-nowrap text-muted`}>{lagos(t.created_at)}</td>
-                <td className={td}>
-                  <Badge tone={st.tone}>{st.label}</Badge>
-                  {t.assigned_to && <span className="mt-1 block text-[12px] text-subtle">{t.assigned_to}</span>}
-                  {notes.get(t.id) && <span className="mt-1 block max-w-[220px] text-[12px] text-muted">Note: {notes.get(t.id)!.note}</span>}
-                </td>
-                <td className={`${td} text-right`}><TicketStatus id={t.id} status={t.status ?? 'open'} number={t.ticket_number} /></td>
-              </tr>
-            );
-          })}
-          {(tickets ?? []).length === 0 && <EmptyRow cols={6}>{filter === 'active' ? 'Nothing needs attention.' : 'No tickets.'}</EmptyRow>}
-        </tbody>
-      </TableFrame>
-    </div>
+    <Suspense fallback={<Loading />}>
+      <View />
+    </Suspense>
   );
 }

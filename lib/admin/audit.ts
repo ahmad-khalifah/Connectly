@@ -1,9 +1,8 @@
-import type { User } from '@supabase/supabase-js';
 import { db } from '@/lib/db/client';
 
 /** Records who changed what. Never blocks the change if logging fails. */
 export async function logAdminAction(
-  user: User,
+  user: { email?: string | null },
   eventType: string,
   message: string,
   entityId: string,

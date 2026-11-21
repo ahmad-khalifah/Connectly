@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { requireAdminApi } from '@/lib/auth/admin';
 import { isUuid } from '@/lib/admin/inputs';
@@ -8,20 +7,20 @@ const STATUSES = ['open', 'in_progress', 'resolved'] as const;
 
 // Move a support ticket (or website enquiry) between open, in progress and resolved.
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { user, denied } = await requireAdminApi();
+  const { user, denied } = await requireAdminApi(req);
   if (denied) return denied;
 
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ message: 'Ticket not found.' }, { status: 404 });
+  if (!isUuid(id)) return Response.json({ message: 'Ticket not found.' }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as { status?: unknown; note?: unknown } | null;
   const status = body?.status;
   if (typeof status !== 'string' || !(STATUSES as readonly string[]).includes(status)) {
-    return NextResponse.json({ message: 'Status must be open, in progress or resolved.' }, { status: 400 });
+    return Response.json({ message: 'Status must be open, in progress or resolved.' }, { status: 400 });
   }
-  if (body?.note !== undefined && typeof body.note !== 'string') return NextResponse.json({ message: 'The note must be text.' }, { status: 400 });
+  if (body?.note !== undefined && typeof body.note !== 'string') return Response.json({ message: 'The note must be text.' }, { status: 400 });
   const note = typeof body?.note === 'string' ? body.note.replace(/\s+/g, ' ').trim() : '';
-  if (note.length > 500) return NextResponse.json({ message: 'Keep the note under 500 characters.' }, { status: 400 });
+  if (note.length > 500) return Response.json({ message: 'Keep the note under 500 characters.' }, { status: 400 });
 
   const { data, error } = await db
     .from('support_tickets')
@@ -30,10 +29,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .select('id, ticket_number, location_id');
   if (error) {
     console.error('[SUPPORT_UPDATE_ERROR]', error);
-    return NextResponse.json({ message: 'The ticket was not updated.' }, { status: 500 });
+    return Response.json({ message: 'The ticket was not updated.' }, { status: 500 });
   }
   const row = (data ?? [])[0] as { id: string; ticket_number: number; location_id: string | null } | undefined;
-  if (!row) return NextResponse.json({ message: 'Ticket not found.' }, { status: 404 });
+  if (!row) return Response.json({ message: 'Ticket not found.' }, { status: 404 });
 
   // The note lives in the activity log (the ticket row has no notes column), so
   // every change keeps its own note and nothing earlier is overwritten.
@@ -41,5 +40,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     locationId: row.location_id,
     metadata: note ? { status, note } : { status },
   });
-  return NextResponse.json({ success: true });
+  return Response.json({ success: true });
 }

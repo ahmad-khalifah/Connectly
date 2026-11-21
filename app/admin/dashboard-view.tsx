@@ -122,12 +122,12 @@ function SidePanels({ side, locationId, locationName, now }: { side: Side | null
         </ul>
       </Panel>
       <Panel title="Routers" description="Health from the controller's check every minute. A router not checked for 5 minutes shows No recent check." flush className="lg:col-span-2"
-        action={<Link href="/admin/network" className="text-sm font-semibold text-brand hover:underline">Manage</Link>}>
+        action={<Link prefetch={false} href="/admin/network" className="text-sm font-semibold text-brand hover:underline">Manage</Link>}>
         <ul className="divide-y divide-line">
           {routers.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
               <span className="min-w-0">
-                <Link href={`/admin/network/routers/${r.id}`} className="block truncate font-semibold text-ink hover:text-brand">{r.name ?? r.identifier}</Link>
+                <Link prefetch={false} href={`/admin/network/router?id=${r.id}`} className="block truncate font-semibold text-ink hover:text-brand">{r.name ?? r.identifier}</Link>
                 <span className="text-[12.5px] text-subtle">
                   {r.lifecycle_status === 'active' ? `Last seen ${r.last_seen_at ? lagosTime(r.last_seen_at) : 'never'}` : `Not active yet (${r.lifecycle_status})`}
                 </span>

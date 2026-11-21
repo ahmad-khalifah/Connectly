@@ -17,13 +17,13 @@ import { isPeriod, type Period } from '@/lib/admin/metrics';
 import { loadNetworkPart, loadPaidPart, loadPeoplePart } from '@/lib/admin/metrics-loader';
 import { loadAlerts } from '@/lib/admin/alerts';
 import { reconcileRecentPending } from '@/lib/payments/ledger';
+import * as views from '@/lib/admin/views';
+import { NotFound } from '@/lib/admin/views';
 
 type Handler = (request: Request) => Promise<Response>;
 
 const HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: HEADERS });
-
-export class NotFound extends Error {}
 
 type View = (q: URLSearchParams, admin: RequestAdmin) => Promise<unknown>;
 
@@ -56,6 +56,25 @@ export const ADMIN_VIEWS: Record<string, View> = {
     ]);
     return { locations: locations.data ?? [], routers: routers.data ?? [], activity: activity.data ?? [] };
   },
+
+  alerts: () => loadAlerts(),
+  settings: () => views.settingsView(),
+  expenses: () => views.expensesView(),
+  customers: (q) => views.customersView(q),
+  transactions: (q) => views.transactionsView(q),
+  revenue: (q) => views.revenueView(q),
+  support: (q) => views.supportView(q),
+  plans: () => views.plansView(),
+  'plan-form': (q) => views.planFormView(q),
+  locations: () => views.locationsView(),
+  'location-form': (q) => views.locationFormView(q),
+  location: (q) => views.locationView(q),
+  network: () => views.networkView(),
+  jobs: (q) => views.jobsView(q),
+  'job-counts': (q) => views.jobCountsView(q),
+  access: (q) => views.accessView(q),
+  router: (q) => views.routerView(q),
+  'router-form': (q) => views.routerFormView(q),
 
   customer: async (q) => {
     const customerId = id(q);
@@ -124,6 +143,11 @@ export async function handleAdminSweep(request: Request): Promise<Response> {
 // they can be static files. Old addresses (links, bookmarks) still work.
 const MOVED: [RegExp, string][] = [
   [/^\/admin\/customers\/([0-9a-f-]{36})$/i, '/admin/customer'],
+  [/^\/admin\/plans\/([0-9a-f-]{36})$/i, '/admin/plan'],
+  [/^\/admin\/locations\/([0-9a-f-]{36})$/i, '/admin/location'],
+  [/^\/admin\/locations\/([0-9a-f-]{36})\/edit$/i, '/admin/location/edit'],
+  [/^\/admin\/network\/routers\/([0-9a-f-]{36})$/i, '/admin/network/router'],
+  [/^\/admin\/network\/routers\/([0-9a-f-]{36})\/edit$/i, '/admin/network/router/edit'],
 ];
 
 export function movedAdminPage(pathname: string): string | null {

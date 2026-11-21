@@ -87,7 +87,7 @@ export default function AdminShell({
               const Icon = item.icon;
               return (
                 <li key={item.href}>
-                  <Link
+                  <Link prefetch={false}
                     href={item.href}
                     aria-current={isActive ? 'page' : undefined}
                     onClick={() => setOpen(false)}
@@ -127,7 +127,7 @@ export default function AdminShell({
 
   const brand = (
     <div className="flex items-center justify-between gap-2">
-      <Link href="/admin" aria-label="Connectly admin home"><Wordmark /></Link>
+      <Link prefetch={false} href="/admin" aria-label="Connectly admin home"><Wordmark /></Link>
       <span
         className={cn(
           'rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset',

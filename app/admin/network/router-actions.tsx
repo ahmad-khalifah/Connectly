@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 type Props = {
   routerId: string;
@@ -23,7 +23,6 @@ const CONFIRM: Partial<Record<Action, { title: string; body: string; cta: string
 };
 
 export default function RouterActions({ routerId, lifecycle, hasCredential, activationBlockers, testPending }: Props) {
-  const router = useRouter();
   const [busy, setBusy] = useState<Action | null>(null);
   const [asking, setAsking] = useState<Action | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string; reasons?: string[] } | null>(null);
@@ -33,7 +32,7 @@ export default function RouterActions({ routerId, lifecycle, hasCredential, acti
     setBusy(action);
     setMessage(null);
     try {
-      const res = await fetch(`/api/admin/network/routers/${routerId}/${action}`, { method: 'POST' });
+      const res = await adminFetch(`/api/admin/network/routers/${routerId}/${action}`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMessage({ tone: 'bad', text: data.message || 'That did not work.', reasons: data.reasons });
@@ -44,7 +43,7 @@ export default function RouterActions({ routerId, lifecycle, hasCredential, acti
             ? data.created === false ? 'A test is already waiting for the controller.' : 'Test queued. The result appears on this page once the controller has reached the router.'
             : action === 'credential' ? 'Credential issued and stored encrypted.' : 'Done.',
         });
-        router.refresh();
+        refreshAdminData();
       }
     } catch {
       setMessage({ tone: 'bad', text: 'No connection. Try again.' });

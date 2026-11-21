@@ -1,11 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 /** Two-step remove (no browser dialog): "Remove", then "Confirm". */
 export default function DeleteExpenseButton({ id }: { id: string }) {
-  const router = useRouter();
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -13,8 +12,8 @@ export default function DeleteExpenseButton({ id }: { id: string }) {
   const remove = async () => {
     setBusy(true);
     setError('');
-    const res = await fetch(`/api/admin/expenses/${id}`, { method: 'DELETE' });
-    if (res.ok) { router.refresh(); return; }
+    const res = await adminFetch(`/api/admin/expenses/${id}`, { method: 'DELETE' });
+    if (res.ok) { refreshAdminData(); return; }
     const data = await res.json().catch(() => ({}));
     setError(data.message || 'Could not remove it.');
     setBusy(false);

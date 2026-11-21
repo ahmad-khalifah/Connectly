@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Field, inputClass, textareaClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Notice } from '@/components/ui/notice';
 import { cn } from '@/lib/utils';
 import { describeNetwork, HOTSPOT_DEFAULTS, HOTSPOT_STATE_LABEL, type HotspotState } from '@/lib/network/hotspot';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 type Saved = { lan_interface: string; gateway_cidr: string; dns_name: string; extra_walled_garden: string[]; version: number; applied_version: number | null; applied_at: string | null; last_error: string | null };
 
@@ -33,7 +33,6 @@ const STATE_TONE: Record<HotspotState, BadgeTone> = {
 };
 
 export default function HotspotCard(p: Props) {
-  const router = useRouter();
   const initial = p.saved ?? HOTSPOT_DEFAULTS;
   const [form, setForm] = useState({
     lan_interface: initial.lan_interface,
@@ -51,7 +50,7 @@ export default function HotspotCard(p: Props) {
     setMessage(null);
     setErrors({});
     try {
-      const res = await fetch(`/api/admin/network/routers/${p.routerId}/hotspot`, {
+      const res = await adminFetch(`/api/admin/network/routers/${p.routerId}/hotspot`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(form),
@@ -62,7 +61,7 @@ export default function HotspotCard(p: Props) {
         setMessage({ tone: 'bad', text: data.message || 'Could not save.' });
       } else {
         setMessage({ tone: 'ok', text: 'Saved. Press "Apply to router" to send it to the router.' });
-        router.refresh();
+        refreshAdminData();
       }
     } catch {
       setMessage({ tone: 'bad', text: 'No connection. Try again.' });
@@ -75,12 +74,12 @@ export default function HotspotCard(p: Props) {
     setBusy('apply');
     setMessage(null);
     try {
-      const res = await fetch(`/api/admin/network/routers/${p.routerId}/apply-hotspot`, { method: 'POST' });
+      const res = await adminFetch(`/api/admin/network/routers/${p.routerId}/apply-hotspot`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setMessage({ tone: 'bad', text: data.message || 'Could not queue it.' });
       else {
         setMessage({ tone: 'ok', text: data.created === false ? 'Already waiting for the controller.' : 'Queued. The controller applies it the next time it reaches the router.' });
-        router.refresh();
+        refreshAdminData();
       }
     } catch {
       setMessage({ tone: 'bad', text: 'No connection. Try again.' });

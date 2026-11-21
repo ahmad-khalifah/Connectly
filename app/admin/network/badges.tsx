@@ -1,4 +1,4 @@
-// Small display helpers shared by the network pages (server components).
+// Small display helpers shared by the network pages.
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { routerHealth } from '@/lib/admin/router-health';
 import { requestTime } from '@/lib/time';

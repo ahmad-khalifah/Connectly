@@ -6,6 +6,7 @@ import { LOCATION_STATUSES, LOCATION_TYPES, slugify, type LocationInput } from '
 import { Field, inputClass, selectClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 type Institution = { id: string; name: string };
 type Props =
@@ -48,7 +49,7 @@ export default function LocationForm(props: Props) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(props.mode === 'edit' ? `/api/admin/locations/${props.locationId}` : '/api/admin/locations', {
+      const res = await adminFetch(props.mode === 'edit' ? `/api/admin/locations/${props.locationId}` : '/api/admin/locations', {
         method: props.mode === 'edit' ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, institutionId: form.institutionId || null }),
@@ -56,8 +57,8 @@ export default function LocationForm(props: Props) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'The location was not saved.');
       const id = props.mode === 'edit' ? props.locationId : data.data?.id;
-      router.push(id ? `/admin/locations/${id}` : '/admin/locations');
-      router.refresh();
+      router.push(id ? `/admin/location?id=${id}` : '/admin/locations');
+      refreshAdminData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The location was not saved.');
       setLoading(false);

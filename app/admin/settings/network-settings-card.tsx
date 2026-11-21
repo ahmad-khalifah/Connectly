@@ -1,15 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Field, inputClass, textareaClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { Panel } from '@/components/ui/panel';
 import { cn } from '@/lib/utils';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 export default function NetworkSettingsCard({ portalUrl, hosts }: { portalUrl: string; hosts: string[] }) {
-  const router = useRouter();
   const [form, setForm] = useState({ portal_url: portalUrl, walled_garden_hosts: hosts.join('\n') });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -21,12 +20,12 @@ export default function NetworkSettingsCard({ portalUrl, hosts }: { portalUrl: s
     setAsking(false);
     setBusy(true); setErrors({}); setMessage(null);
     try {
-      const res = await fetch('/api/admin/network/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(form) });
+      const res = await adminFetch('/api/admin/network/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(form) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setErrors(data.errors ?? {}); setMessage({ ok: false, text: data.message || 'Not saved.' }); }
       else {
         setMessage({ ok: true, text: data.routersQueued == null ? 'Saved. Routers pick it up when their hotspot is next applied.' : `Saved. Hotspot update queued on ${data.routersQueued} router${data.routersQueued === 1 ? '' : 's'}.` });
-        router.refresh();
+        refreshAdminData();
       }
     } catch { setMessage({ ok: false, text: 'No connection. Try again.' }); }
     finally { setBusy(false); }

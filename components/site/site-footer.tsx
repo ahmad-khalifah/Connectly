@@ -18,8 +18,8 @@ export function SiteFooter() {
         <div>
           <h2 className="text-sm font-semibold text-ink">What we do</h2>
           <ul className="mt-3 space-y-2 text-sm text-muted">
-            <li><Link href="/wifi" className="hover:text-brand">Managed WiFi</Link></li>
-            <li><Link href="/wifi#enquire" className="hover:text-brand">Enquire about your site</Link></li>
+            <li><Link prefetch={false} href="/wifi" className="hover:text-brand">Managed WiFi</Link></li>
+            <li><Link prefetch={false} href="/wifi#enquire" className="hover:text-brand">Enquire about your site</Link></li>
           </ul>
         </div>
         <div>

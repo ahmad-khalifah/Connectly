@@ -1,20 +1,13 @@
-import { requireAdminPage } from '@/lib/auth/admin';
-import { loadAlerts } from '@/lib/admin/alerts';
-import AlertsPanel from '../components/alerts-panel';
-import { PageHeader } from '@/components/admin/page-header';
+import { Suspense } from 'react';
+import View from './view';
+import { Loading } from '@/components/admin/admin-data';
 
-export const dynamic = 'force-dynamic';
-
-export default async function AlertsPage() {
-  await requireAdminPage();
-  const alerts = await loadAlerts();
+// Alerts: problems worked out from what the platform records.
+// Static page; the data loads in the browser from /api/admin/view (lib/admin/views.ts).
+export default function Page() {
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Alerts"
-        description="Problems worked out from what the platform already records: the controller, routers, waiting customers, failed jobs, payments that did not match, and SMS."
-      />
-      <AlertsPanel alerts={alerts} quietText="Nothing needs attention right now." />
-    </div>
+    <Suspense fallback={<Loading />}>
+      <View />
+    </Suspense>
   );
 }

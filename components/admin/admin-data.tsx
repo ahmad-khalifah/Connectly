@@ -26,6 +26,13 @@ export async function adminFetch(input: string, init?: RequestInit): Promise<Res
   return res;
 }
 
+const CHANGED = 'connectly:admin-data-changed';
+
+/** After a save or action: every admin view on the page loads its data again. */
+export function refreshAdminData() {
+  window.dispatchEvent(new Event(CHANGED));
+}
+
 export function viewUrl(name: string, params: Record<string, string | null | undefined> = {}): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) q.set(k, v);
@@ -58,6 +65,13 @@ export function useAdminView<T>(url: string | null): { loaded: Loaded<T>; reload
       .catch(() => { if (!cancelled) setLoaded({ state: 'error', message: 'The server could not be reached.' }); });
     return () => { cancelled = true; };
   }, [url, attempt]);
+
+  // Reload (without showing loading again) when an action changed the data.
+  useEffect(() => {
+    const again = () => setAttempt((n) => n + 1);
+    window.addEventListener(CHANGED, again);
+    return () => window.removeEventListener(CHANGED, again);
+  }, []);
 
   return { loaded, reload: () => { setLoaded({ state: 'loading' }); setAttempt((n) => n + 1); } };
 }

@@ -27,8 +27,8 @@ export default function Home() {
                 Connectly Networks designs, installs and runs paid WiFi for markets, campuses, hostels and estates. People pay on their phone and are online in seconds.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
-                <Link href="/wifi#enquire" className={buttonClass({ size: 'lg' })}>Enquire about your site</Link>
-                <Link href="/wifi" className={buttonClass({ size: 'lg', variant: 'secondary' })}>How it works</Link>
+                <Link prefetch={false} href="/wifi#enquire" className={buttonClass({ size: 'lg' })}>Enquire about your site</Link>
+                <Link prefetch={false} href="/wifi" className={buttonClass({ size: 'lg', variant: 'secondary' })}>How it works</Link>
               </div>
             </div>
             <figure className="relative">
@@ -53,7 +53,7 @@ export default function Home() {
                 <li>The internet link, including satellite where there is no fibre</li>
                 <li>Every router watched around the clock, with problems fixed by us</li>
               </ul>
-              <Link href="/wifi" className="mt-8 inline-block text-[15px] font-semibold text-brand underline underline-offset-4 hover:no-underline">What we provide</Link>
+              <Link prefetch={false} href="/wifi" className="mt-8 inline-block text-[15px] font-semibold text-brand underline underline-offset-4 hover:no-underline">What we provide</Link>
             </article>
             <article className="px-5 py-14 sm:px-8">
               <div className="h-1 w-12 bg-ochre" aria-hidden />
@@ -66,7 +66,7 @@ export default function Home() {
                 <li>Online straight after paying, with a WiFi code for other devices</li>
                 <li>Help from a person if anything goes wrong</li>
               </ul>
-              <Link href="/wifi#journey" className="mt-8 inline-block text-[15px] font-semibold text-brand underline underline-offset-4 hover:no-underline">How customers get online</Link>
+              <Link prefetch={false} href="/wifi#journey" className="mt-8 inline-block text-[15px] font-semibold text-brand underline underline-offset-4 hover:no-underline">How customers get online</Link>
             </article>
           </div>
         </section>
@@ -98,7 +98,7 @@ export default function Home() {
             <h2 className="text-[32px] font-bold leading-tight tracking-[-0.02em] text-ink">Talk to us</h2>
             <p className="mt-3 max-w-[40rem] text-[17px] leading-relaxed text-muted">Want WiFi at your site, or need help with a plan you bought? Here is where to reach us.</p>
             <div className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-panel)] border border-line bg-line md:grid-cols-3">
-              <Link href="/wifi#enquire" className="group bg-surface p-6 hover:bg-brand-soft">
+              <Link prefetch={false} href="/wifi#enquire" className="group bg-surface p-6 hover:bg-brand-soft">
                 <p className="text-[17px] font-semibold text-ink group-hover:text-brand">WiFi for your site</p>
                 <p className="mt-1 text-sm text-muted">Markets, campuses, hostels, estates, offices and events.</p>
               </Link>

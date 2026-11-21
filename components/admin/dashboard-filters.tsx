@@ -20,7 +20,7 @@ export function DashboardFilters({ period, locationId, locations, basePath = '/a
     <div className="flex flex-wrap items-center gap-3">
       <nav aria-label="Period" className="inline-flex flex-wrap rounded-[var(--radius-control)] border border-line bg-surface p-0.5">
         {PERIODS.map((p) => (
-          <Link
+          <Link prefetch={false}
             key={p.id}
             href={href(p.id, locationId)}
             aria-current={p.id === period ? 'true' : undefined}

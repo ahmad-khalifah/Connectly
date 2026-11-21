@@ -33,6 +33,7 @@ export function createFakeDb(handler: Handler, rpc: (fn: string, args: Record<st
       or(expr: string) { op.filters.push(['or', expr]); return chain; },
       order() { return chain; },
       limit(n: number) { op.filters.push(['limit', n]); return chain; },
+      range(from: number, to: number) { op.filters.push(['range', [from, to]]); return chain; },
       maybeSingle: () => Promise.resolve(run()),
       single: () => Promise.resolve(run()),
       then(resolve: (r: Result) => unknown, reject?: (e: unknown) => unknown) {

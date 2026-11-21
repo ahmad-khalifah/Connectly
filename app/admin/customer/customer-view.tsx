@@ -57,7 +57,7 @@ function Customer({ customer, purchases, devices, sms }: Data) {
   return (
     <div className="space-y-6">
       <PageHeader
-        back={<Link href="/admin/customers" className="font-semibold text-muted hover:text-brand">Customers</Link>}
+        back={<Link prefetch={false} href="/admin/customers" className="font-semibold text-muted hover:text-brand">Customers</Link>}
         title={<span className="tnum">+{customer.phone_number}</span>}
         description={`Customer since ${lagos(customer.created_at)}`}
       />

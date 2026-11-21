@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { EXPENSE_CATEGORIES } from '@/lib/admin/inputs';
 import { inputClass as input, selectClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 
 const LABELS: Record<string, string> = {
@@ -15,7 +15,6 @@ const LABELS: Record<string, string> = {
 };
 
 export default function ExpenseForm({ locations, today }: { locations: { id: string; name: string }[]; today: string }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -28,7 +27,7 @@ export default function ExpenseForm({ locations, today }: { locations: { id: str
     setBusy(true);
     setError('');
     try {
-      const res = await fetch('/api/admin/expenses', {
+      const res = await adminFetch('/api/admin/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, locationId: form.locationId || null }),
@@ -37,7 +36,7 @@ export default function ExpenseForm({ locations, today }: { locations: { id: str
       if (!res.ok) throw new Error(data.message || 'Could not record the expense.');
       setForm(empty);
       setOpen(false);
-      router.refresh();
+      refreshAdminData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not record the expense.');
     } finally {

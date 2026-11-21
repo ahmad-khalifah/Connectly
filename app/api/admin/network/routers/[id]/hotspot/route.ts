@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { requireAdminApi } from '@/lib/auth/admin';
 import { logAdminAction } from '@/lib/admin/audit';
@@ -6,12 +5,12 @@ import { isUuid, friendlyDbError } from '@/lib/admin/inputs';
 import { HOTSPOT_COLUMNS, parseHotspotInput } from '@/lib/network/hotspot';
 
 type Ctx = { params: Promise<{ id: string }> };
-const json = (status: number, body: Record<string, unknown>) => NextResponse.json(body, { status });
+const json = (status: number, body: Record<string, unknown>) => Response.json(body, { status });
 
 // Saves the router's hotspot settings. Saving does not touch the router:
 // "Apply to router" queues the controller job that does.
 export async function PUT(req: Request, { params }: Ctx) {
-  const { user, denied } = await requireAdminApi();
+  const { user, denied } = await requireAdminApi(req);
   if (denied) return denied;
 
   const { id } = await params;

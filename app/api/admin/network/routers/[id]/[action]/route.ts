@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { requireAdminApi } from '@/lib/auth/admin';
 import { logAdminAction } from '@/lib/admin/audit';
@@ -7,7 +6,7 @@ import { activationBlockers, canRetire, canSuspend, canTest, type RouterForLifec
 import { issueRouterCredential, CredentialKeyError } from '@/lib/network/credentials';
 
 type Ctx = { params: Promise<{ id: string; action: string }> };
-const json = (status: number, body: Record<string, unknown>) => NextResponse.json(body, { status });
+const json = (status: number, body: Record<string, unknown>) => Response.json(body, { status });
 
 // Lifecycle columns only. credential_key_id stands in for "a credential is
 // stored" (the database requires the ciphertext for an Active router), so
@@ -15,8 +14,8 @@ const json = (status: number, body: Record<string, unknown>) => NextResponse.jso
 const COLUMNS =
   'id, name, location_id, lifecycle_status, connection_method, credential_key_id, wg_public_key, tunnel_ip, management_ip, last_test_at, last_test_result';
 
-export async function POST(_req: Request, { params }: Ctx) {
-  const { user, denied } = await requireAdminApi();
+export async function POST(req: Request, { params }: Ctx) {
+  const { user, denied } = await requireAdminApi(req);
   if (denied) return denied;
 
   const { id, action } = await params;

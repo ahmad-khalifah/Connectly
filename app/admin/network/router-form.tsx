@@ -7,6 +7,7 @@ import { PRE_REGISTRATION_STEPS } from '@/lib/network/setup-script';
 import { Field, inputClass, selectClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 type LocationOption = { id: string; name: string };
 type Props =
@@ -37,7 +38,7 @@ export default function RouterForm(props: Props) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(props.mode === 'edit' ? `/api/admin/network/routers/${props.routerId}` : '/api/admin/network/routers', {
+      const res = await adminFetch(props.mode === 'edit' ? `/api/admin/network/routers/${props.routerId}` : '/api/admin/network/routers', {
         method: props.mode === 'edit' ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -50,8 +51,8 @@ export default function RouterForm(props: Props) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'The router was not saved.');
       const id = props.mode === 'edit' ? props.routerId : data.id;
-      router.push(`/admin/network/routers/${id}`);
-      router.refresh();
+      router.push(`/admin/network/router?id=${id}`);
+      refreshAdminData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The router was not saved.');
       setLoading(false);

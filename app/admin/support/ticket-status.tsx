@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { inputClass } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 const NEXT: Record<string, { to: string; label: string }[]> = {
   open: [{ to: 'in_progress', label: 'Start' }, { to: 'resolved', label: 'Resolve' }],
@@ -13,7 +13,6 @@ const NEXT: Record<string, { to: string; label: string }[]> = {
 };
 
 export default function TicketStatus({ id, status, number }: { id: string; status: string; number: number }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resolving, setResolving] = useState(false);
@@ -23,7 +22,7 @@ export default function TicketStatus({ id, status, number }: { id: string; statu
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(`/api/admin/support/${id}`, {
+      const res = await adminFetch(`/api/admin/support/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(withNote ? { status: to, note: withNote } : { status: to }),
@@ -33,7 +32,7 @@ export default function TicketStatus({ id, status, number }: { id: string; statu
       else {
         setResolving(false);
         setNote('');
-        router.refresh();
+        refreshAdminData();
       }
     } catch {
       setError('No connection. Try again.');

@@ -4,22 +4,10 @@
 
 import { db } from '@/lib/db/client';
 
-export const JOB_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'dead'] as const;
-export type JobStatus = (typeof JOB_STATUSES)[number];
-export const JOB_KINDS = ['router.test', 'router.sync_profiles', 'router.configure_hotspot', 'access.provision', 'access.revoke', 'access.login', 'session.disconnect'] as const;
+export { JOB_STATUSES, JOB_KINDS, JOB_LABELS, type JobStatus } from './labels';
 
 /** Extra attempts an admin retry grants, bounded by the table's limit of 50. */
 export const RETRY_EXTRA_ATTEMPTS = 3;
-
-export const JOB_LABELS: Record<string, string> = {
-  'router.test': 'Test connection',
-  'router.sync_profiles': 'Sync speed profiles',
-  'router.configure_hotspot': 'Set up hotspot',
-  'access.provision': 'Provision access',
-  'access.revoke': 'Revoke access',
-  'access.login': 'Log device in',
-  'session.disconnect': 'Disconnect session',
-};
 
 export type AdminJobResult = { ok: true } | { ok: false; status: number; message: string };
 

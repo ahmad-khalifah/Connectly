@@ -5,6 +5,7 @@ import { Field, inputClass } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { Panel } from '@/components/ui/panel';
+import { adminFetch } from '@/components/admin/admin-data';
 
 export default function SmsTestCard({ configured }: { configured: boolean }) {
   const [phone, setPhone] = useState('');
@@ -16,7 +17,7 @@ export default function SmsTestCard({ configured }: { configured: boolean }) {
     setBusy(true);
     setResult(null);
     try {
-      const res = await fetch('/api/admin/sms/test', {
+      const res = await adminFetch('/api/admin/sms/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),

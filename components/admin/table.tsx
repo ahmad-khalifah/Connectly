@@ -36,8 +36,8 @@ export function Pager({ page, pages, total, noun, href }: { page: number; pages:
       <span className="tnum">{total.toLocaleString('en-NG')} {noun}{total === 1 ? '' : 's'}{pages > 1 ? `, page ${page} of ${pages}` : ''}</span>
       {pages > 1 && (
         <span className="flex gap-2">
-          <Link href={href(page - 1)} className={cn(buttonClass({ variant: 'secondary', size: 'sm' }), page <= 1 && off)} aria-disabled={page <= 1}>Previous</Link>
-          <Link href={href(page + 1)} className={cn(buttonClass({ variant: 'secondary', size: 'sm' }), page >= pages && off)} aria-disabled={page >= pages}>Next</Link>
+          <Link prefetch={false} href={href(page - 1)} className={cn(buttonClass({ variant: 'secondary', size: 'sm' }), page <= 1 && off)} aria-disabled={page <= 1}>Previous</Link>
+          <Link prefetch={false} href={href(page + 1)} className={cn(buttonClass({ variant: 'secondary', size: 'sm' }), page >= pages && off)} aria-disabled={page >= pages}>Next</Link>
         </span>
       )}
     </div>

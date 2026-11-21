@@ -31,7 +31,7 @@ export async function loadAlerts(now = Date.now()): Promise<Alert[]> {
     alerts.push({ severity: 'error', title: 'Network Controller is not running', detail: 'Paid customers are not being added to routers, and expired access is not being removed.', href: '/admin/network' });
   }
   for (const r of active.filter((x) => x.status === 'offline')) {
-    alerts.push({ severity: 'error', title: `Router ${r.name ?? r.identifier} is offline`, detail: 'The controller cannot reach it. Customers at this location may be unable to pay or connect.', href: `/admin/network/routers/${r.id}` });
+    alerts.push({ severity: 'error', title: `Router ${r.name ?? r.identifier} is offline`, detail: 'The controller cannot reach it. Customers at this location may be unable to pay or connect.', href: `/admin/network/router?id=${r.id}` });
   }
   const n = (r: { count: number | null }) => r.count ?? 0;
   if (n(stuck)) alerts.push({ severity: 'error', title: `${n(stuck)} paid customer${n(stuck) === 1 ? ' is' : 's are'} waiting for access`, detail: 'Paid more than 10 minutes ago, but the code is not on the router yet.', href: '/admin/network/access?status=pending_device' });

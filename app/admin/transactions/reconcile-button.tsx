@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 const OUTCOME: Record<string, string> = {
   paid: 'Confirmed paid',
@@ -18,7 +18,6 @@ const OUTCOME: Record<string, string> = {
 // Asks the server to re-check a pending payment with Korapay's verify API.
 // The server decides; this button never sets a status itself.
 export default function ReconcileButton({ reference }: { reference: string }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -26,14 +25,14 @@ export default function ReconcileButton({ reference }: { reference: string }) {
     setBusy(true);
     setMessage('');
     try {
-      const res = await fetch('/api/admin/payments/reconcile', {
+      const res = await adminFetch('/api/admin/payments/reconcile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference }),
       });
       const json = await res.json().catch(() => ({}));
       setMessage(res.ok ? OUTCOME[json.outcome] ?? String(json.outcome ?? 'Done').replace(/_/g, ' ') : json.message || 'Check failed');
-      router.refresh();
+      refreshAdminData();
     } catch {
       setMessage('No connection. Try again.');
     } finally {

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { adminFetch, refreshAdminData } from '@/components/admin/admin-data';
 
 const ASK = {
   retry: { text: 'Retry now? It gets up to 3 more attempts.', cta: 'Retry' },
@@ -10,7 +10,6 @@ const ASK = {
 };
 
 export default function JobActions({ jobId, status }: { jobId: string; status: string }) {
-  const router = useRouter();
   const [asking, setAsking] = useState<'retry' | 'cancel' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -19,10 +18,10 @@ export default function JobActions({ jobId, status }: { jobId: string; status: s
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(`/api/admin/network/jobs/${jobId}/${action}`, { method: 'POST' });
+      const res = await adminFetch(`/api/admin/network/jobs/${jobId}/${action}`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setError(data.message || 'That did not work.');
-      else router.refresh();
+      else refreshAdminData();
     } catch {
       setError('No connection. Try again.');
     } finally {
