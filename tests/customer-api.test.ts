@@ -144,11 +144,12 @@ describe('POST /api/checkout', () => {
 
 describe('routes the Worker answers itself', () => {
   it('matches only the customer paths and methods', async () => {
-    const { customerApiRoute, handlePortal, handleCheckout, handlePurchaseStatus, handleKoraWebhook } = await api();
+    const { customerApiRoute, handlePortal, handleCheckout, handlePurchaseStatus, handlePurchaseNotify, handleKoraWebhook } = await api();
     expect(customerApiRoute('GET', '/api/portal')).toBe(handlePortal);
     expect(customerApiRoute('POST', '/api/checkout')).toBe(handleCheckout);
     expect(customerApiRoute('GET', '/api/purchase/status')).toBe(handlePurchaseStatus);
     expect(customerApiRoute('POST', '/api/webhooks/kora')).toBe(handleKoraWebhook);
+    expect(customerApiRoute('POST', '/api/purchase/notify')).toBe(handlePurchaseNotify);
     expect(customerApiRoute('post', '/api/webhooks/kora/')).toBe(handleKoraWebhook);
     expect(customerApiRoute('GET', '/api/checkout')).toBeNull();
     expect(customerApiRoute('GET', '/api/admin/plans')).toBeNull();

@@ -91,12 +91,22 @@ customer path never renders on the server:
   the full supabase-js client, whose sign-in and realtime set-up cost CPU on
   every new Worker instance. Korapay's webhook arrives from abroad and
   usually starts a new instance (12 and 24 ms with the full client).
+- CPU grows by roughly 1 ms per database or Korapay call. The webhook made
+  11 (6 for the payment, 5 for the SMS), so it no longer sends the SMS: it
+  stores the event, verifies with Korapay and confirms the payment, as before.
+  The payment page then calls `POST /api/purchase/notify` once, which sends
+  the SMS with the WiFi code; the notification row is claimed first, so a
+  purchase gets at most one SMS whoever asks. A customer who closes the page
+  within seconds of paying gets no SMS until the scheduled sweep (planned
+  with the edge cron jobs) sends unsent confirmations. Admin re-checks still
+  send the SMS directly.
 - The staging banner is decided in the browser from the address
   (`components/env-banner.tsx`), since a static file is built once.
 
 After the change (staging, 21 Nov 2026): `/api/portal` 2–7 ms,
 `/api/purchase/status` 3–8 ms, `/api/checkout` 4 ms (14 ms on a new
-instance), customer pages 0 (not run). Webhook: to be re-measured.
+instance), customer pages 0 (not run). Webhook 12 ms with the SMS; to be
+re-measured without it.
 
 The admin still renders per request and is the next part to move (same
 approach: static pages plus small JSON handlers).

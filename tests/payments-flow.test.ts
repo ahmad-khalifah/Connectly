@@ -32,9 +32,11 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------- reconcile
 describe('reconcilePurchase', () => {
+  // Like the database: once confirm_payment has run, the purchase reads as paid.
   const purchaseRow = (status: string): Handler => (op) => {
     if (op.table === 'purchases' && op.action === 'select') {
-      return { data: { id: 'p1', status, reference: REF, phone_number: '2348031234567', amount_kobo: 25000, expires_at: '2026-11-18T10:00:00Z', plans: { name: 'Day' }, locations: { name: 'Garki' } }, error: null };
+      const confirmed = fake.rpcCalls.some((c) => c.fn === 'confirm_payment');
+      return { data: { id: 'p1', status: confirmed ? 'paid' : status, reference: REF, phone_number: '2348031234567', amount_kobo: 25000, expires_at: '2026-11-18T10:00:00Z', plans: { name: 'Day' }, locations: { name: 'Garki' } }, error: null };
     }
     if (op.table === 'notifications' && op.action === 'insert') return { data: { id: 'n1' }, error: null };
     if (op.table === 'notifications' && op.action === 'select') return { data: { attempts: 0 }, error: null };
@@ -382,5 +384,82 @@ describe('success page', () => {
     expect(ourReference(['KPY-CK-abc123', ours])).toBe(ours);
     expect(ourReference(['KPY-CK-abc123'])).toBeNull();
     expect(ourReference([])).toBeNull();
+  });
+});
+
+// ------------------------------------------- SMS kept out of the webhook (CPU)
+describe('confirmation SMS sent at the payment page\'s request', () => {
+  const REF3 = 'CONN_11111111-2222-4333-8444-666666666666';
+  const world = (status: string, opts: { duplicate?: boolean } = {}): Handler => (op) => {
+    if (op.table === 'purchases' && op.action === 'select') {
+      const confirmed = fake.rpcCalls.some((c) => c.fn === 'confirm_payment');
+      return { data: { id: 'p1', status: confirmed ? 'paid' : status, reference: REF3, phone_number: '2348031234567', amount_kobo: 10000, expires_at: '2026-11-21T15:45:00Z', created_at: new Date().toISOString(), plans: { name: 'TEST 15 Minutes' }, locations: { name: 'Hub' } }, error: null };
+    }
+    if (op.table === 'payment_events' && op.action === 'insert') return { data: { id: 'e1' }, error: null };
+    if (op.table === 'notifications' && op.action === 'insert') {
+      return opts.duplicate ? { data: null, error: { code: '23505', message: 'dup' } } : { data: { id: 'n1' }, error: null };
+    }
+    if (op.table === 'network_authorizations') return { data: { voucher_code: 'CG8FSMMQ' }, error: null };
+    return { data: null, error: null };
+  };
+  const success = () => {
+    verifyCharge.mockResolvedValue({ reference: REF3, status: 'success', amountPaidKobo: 10000, feeKobo: 0, currency: 'NGN', providerReference: 'KPY-3' });
+    return (fn: string) => ({ data: { outcome: fn === 'confirm_payment' ? 'paid' : 'x' }, error: null });
+  };
+  const notify = async (body: unknown, origin?: string) => {
+    const { POST } = await import('@/app/api/purchase/notify/route');
+    return POST(new Request('https://portal.example/api/purchase/notify', {
+      method: 'POST', headers: { 'content-type': 'application/json', ...(origin ? { origin } : {}) }, body: JSON.stringify(body),
+    }));
+  };
+
+  it('the webhook confirms the payment but sends no SMS', async () => {
+    fake = createFakeDb(world('pending'), success());
+    const { POST } = await import('@/app/api/webhooks/kora/route');
+    const data = { reference: 'KPY-3', payment_reference: REF3, status: 'success' };
+    const sig = crypto.createHmac('sha256', SECRET).update(JSON.stringify(data)).digest('hex');
+    const res = await POST(new Request('https://x/api/webhooks/kora', { method: 'POST', headers: { 'x-korapay-signature': sig }, body: JSON.stringify({ event: 'charge.success', data }) }));
+    expect(await res.json()).toMatchObject({ outcome: 'paid' });
+    expect(fake.rpcCalls.map((c) => c.fn)).toEqual(['confirm_payment']);
+    expect(sendTermiiSMS).not.toHaveBeenCalled();
+    expect(fake.ops.some((o) => o.table === 'notifications')).toBe(false);
+  });
+
+  it('the status re-check confirms a pending payment without sending the SMS', async () => {
+    fake = createFakeDb(world('pending'), success());
+    const { GET } = await import('@/app/api/purchase/status/route');
+    await GET(new Request(`http://x/api/purchase/status?reference=${REF3}&check=1`));
+    expect(fake.rpcCalls.map((c) => c.fn)).toEqual(['confirm_payment']);
+    expect(sendTermiiSMS).not.toHaveBeenCalled();
+  });
+
+  it('sends the SMS with the WiFi code once the purchase is paid, without reading the attempts back', async () => {
+    fake = createFakeDb(world('paid'));
+    const res = await notify({ reference: REF3 });
+    expect(await res.json()).toEqual({ sms: 'sent' });
+    expect(sendTermiiSMS).toHaveBeenCalledTimes(1);
+    expect(sendTermiiSMS.mock.calls[0][1]).toMatch(/Your WiFi code: CG8FSMMQ/);
+    expect(fake.ops.filter((o) => o.table === 'notifications').map((o) => o.action)).toEqual(['insert', 'update']);
+    expect(fake.ops.find((o) => o.table === 'notifications' && o.action === 'update')?.values).toMatchObject({ status: 'sent', attempts: 1 });
+  });
+
+  it('never sends a second SMS for the same purchase', async () => {
+    fake = createFakeDb(world('paid', { duplicate: true }));
+    expect(await (await notify({ reference: REF3 })).json()).toEqual({ sms: 'already_claimed' });
+    expect(sendTermiiSMS).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing for a purchase that is not paid', async () => {
+    fake = createFakeDb(world('pending'));
+    expect(await (await notify({ reference: REF3 })).json()).toEqual({ sms: 'not_paid' });
+    expect(fake.ops.some((o) => o.table === 'notifications')).toBe(false);
+    expect(sendTermiiSMS).not.toHaveBeenCalled();
+  });
+
+  it('refuses a malformed reference and another site\'s page, touching nothing', async () => {
+    fake = createFakeDb(world('paid'));
+    expect((await notify({ reference: 'KPY-3' })).status).toBe(400);
+    expect((await notify({ reference: REF3 }, 'https://evil.example')).status).toBe(403);
+    expect(fake.ops).toEqual([]);
   });
 });

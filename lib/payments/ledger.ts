@@ -20,7 +20,16 @@ export type ReconcileOutcome =
   | 'not_payable'
   | 'unchanged';
 
-export async function reconcilePurchase(reference: string): Promise<{ outcome: ReconcileOutcome; purchaseId?: string }> {
+/**
+ * `notify: false` confirms the payment without sending the confirmation SMS.
+ * The Korapay webhook and the customer's status checks use it to stay within
+ * the Workers Free CPU limit; the payment page then asks for the SMS with
+ * POST /api/purchase/notify (sendPaymentConfirmation), which sends it once.
+ */
+export async function reconcilePurchase(
+  reference: string,
+  { notify = true }: { notify?: boolean } = {}
+): Promise<{ outcome: ReconcileOutcome; purchaseId?: string }> {
   const { data: purchase } = await db
     .from('purchases')
     .select('id, status')
@@ -43,7 +52,7 @@ export async function reconcilePurchase(reference: string): Promise<{ outcome: R
     });
     if (error) throw new Error(`confirm_payment failed: ${error.message}`);
     const outcome = (data as { outcome: ReconcileOutcome }).outcome;
-    if (outcome === 'paid') {
+    if (outcome === 'paid' && notify) {
       // The payment and the access grant are already committed. Nothing about
       // the SMS (Termii down, sender ID not approved, a database hiccup while
       // recording it) may turn a confirmed payment into an error response.
@@ -117,22 +126,28 @@ export async function reconcileRecentPending({ limit = 10, maxAgeHours = 24 } = 
   return summary;
 }
 
+export type ConfirmationSms = 'sent' | 'failed' | 'already_claimed' | 'not_paid' | 'no_phone' | 'not_found';
+
 /**
- * Sends the payment confirmation SMS once per purchase. The notifications
- * row (unique per purchase + template) is claimed first, so a duplicate
- * webhook cannot send a second SMS. An SMS failure is recorded and never
+ * Sends the payment confirmation SMS once per purchase, and only for a paid
+ * purchase. The notifications row (unique per purchase + template) is
+ * claimed first, so a duplicate webhook or a second request from the payment
+ * page cannot send a second SMS. An SMS failure is recorded and never
  * changes the purchase.
  */
-export async function sendPaymentConfirmation(purchaseId: string): Promise<void> {
+export async function sendPaymentConfirmation(purchase: string | { reference: string }): Promise<ConfirmationSms> {
+  const [col, val] = typeof purchase === 'string' ? ['id', purchase] : ['reference', purchase.reference];
   const { data: p } = await db
     .from('purchases')
-    .select('id, reference, phone_number, amount_kobo, expires_at, plans(name), locations(name)')
-    .eq('id', purchaseId)
-    .single();
-  if (!p?.phone_number) return;
+    .select('id, status, reference, phone_number, amount_kobo, expires_at, plans(name), locations(name)')
+    .eq(col, val)
+    .maybeSingle();
+  if (!p) return 'not_found';
+  if (p.status !== 'paid') return 'not_paid';
+  if (!p.phone_number) return 'no_phone';
   // The access grant is created in the same transaction as the payment (trigger
   // trg_purchases_grant_access), so its voucher exists by now.
-  const { data: grant } = await db.from('network_authorizations').select('voucher_code').eq('purchase_id', purchaseId).maybeSingle();
+  const { data: grant } = await db.from('network_authorizations').select('voucher_code').eq('purchase_id', p.id).maybeSingle();
   const voucher = grant?.voucher_code ? String(grant.voucher_code) : null;
 
   const plan = (Array.isArray(p.plans) ? p.plans[0] : p.plans) as { name?: string } | null;
@@ -152,24 +167,31 @@ export async function sendPaymentConfirmation(purchaseId: string): Promise<void>
     .select('id')
     .maybeSingle();
   if (error) {
-    if (error.code === '23505') return; // already sent or in progress
+    if (error.code === '23505') return 'already_claimed'; // already sent or in progress
     console.error('[NOTIFICATION_INSERT_ERROR]', error);
-    return;
+    return 'failed';
   }
-  if (!claimed) return;
+  if (!claimed) return 'already_claimed';
 
-  await deliverNotification(claimed.id, p.phone_number, body);
+  // A row claimed just now has no attempts yet.
+  const result = await deliverNotification(claimed.id, p.phone_number, body, 0);
+  return result.ok ? 'sent' : 'failed';
 }
 
-export async function deliverNotification(notificationId: string, phone: string, body: string) {
+/** `attemptsSoFar`, when the caller knows it, saves reading it back. */
+export async function deliverNotification(notificationId: string, phone: string, body: string, attemptsSoFar?: number) {
   const result = await sendTermiiSMS(phone, body);
-  const { data: current } = await db.from('notifications').select('attempts').eq('id', notificationId).single();
+  let attempts = attemptsSoFar;
+  if (attempts === undefined) {
+    const { data: current } = await db.from('notifications').select('attempts').eq('id', notificationId).single();
+    attempts = Number(current?.attempts ?? 0);
+  }
   await db
     .from('notifications')
     .update(
       result.ok
-        ? { status: 'sent', sent_at: new Date().toISOString(), provider_message_id: result.messageId, attempts: (current?.attempts ?? 0) + 1, last_error: null }
-        : { status: 'failed', attempts: (current?.attempts ?? 0) + 1, last_error: result.error }
+        ? { status: 'sent', sent_at: new Date().toISOString(), provider_message_id: result.messageId, attempts: attempts + 1, last_error: null }
+        : { status: 'failed', attempts: attempts + 1, last_error: result.error }
     )
     .eq('id', notificationId);
   if (!result.ok) console.error('[SMS_FAILED]', notificationId, result.error);

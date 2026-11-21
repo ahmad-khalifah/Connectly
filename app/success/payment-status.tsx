@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, Loader2 } from 'lucide-react';
 import { LensMark } from '@/components/ui/lens-mark';
 import { ButtonLink, buttonClass } from '@/components/ui/button';
@@ -36,6 +36,7 @@ export default function PaymentStatus({ reference }: { reference: string }) {
   const [state, setState] = useState<Status | null>(null);
   const [gaveUp, setGaveUp] = useState(false);
   const [slow, setSlow] = useState(false);
+  const asked = useRef(false);
 
   useEffect(() => {
     let polls = 0;
@@ -49,6 +50,22 @@ export default function PaymentStatus({ reference }: { reference: string }) {
         const json = (await res.json()) as Status;
         if (stopped) return;
         setState(res.ok || res.status === 404 ? json : { status: 'error' });
+        // Once paid, ask once for the text message with the WiFi code. The
+        // server sends at most one per purchase, whoever asks.
+        if (json.status === 'paid' && !asked.current && (json.access?.sms ?? 'none') === 'none') {
+          asked.current = true;
+          fetch('/api/purchase/notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reference }),
+          })
+            .then((r) => r.json() as Promise<{ sms?: string }>)
+            .then(({ sms }) => {
+              if (stopped || (sms !== 'sent' && sms !== 'failed')) return;
+              setState((prev) => (prev?.access ? { ...prev, access: { ...prev.access, sms } } : prev));
+            })
+            .catch(() => { /* the code is on screen; the text is a copy */ });
+        }
         if (json.status !== 'pending' && !settling(json)) return; // final state reached
       } catch {
         if (!stopped) setState({ status: 'error' });

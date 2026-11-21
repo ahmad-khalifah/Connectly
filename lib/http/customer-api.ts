@@ -11,7 +11,7 @@
 import crypto from 'crypto';
 import { db } from '@/lib/db/client';
 import { verifyWebhookSignature, KorapayConfigError } from '@/lib/payments/korapay';
-import { reconcilePurchase } from '@/lib/payments/ledger';
+import { reconcilePurchase, sendPaymentConfirmation } from '@/lib/payments/ledger';
 import { initializeKoraCheckout } from '@/lib/payments/checkout';
 import { accessForPurchase, connectLink, hotspotLoginUrl } from '@/lib/network/customer-access';
 
@@ -32,6 +32,7 @@ export function customerApiRoute(method: string, pathname: string): Handler | nu
     'GET /api/portal': handlePortal,
     'POST /api/checkout': handleCheckout,
     'GET /api/purchase/status': handlePurchaseStatus,
+    'POST /api/purchase/notify': handlePurchaseNotify,
     'POST /api/webhooks/kora': handleKoraWebhook,
     'GET /status': handleOldStatusLink,
   };
@@ -198,7 +199,7 @@ export async function handlePurchaseStatus(request: Request): Promise<Response> 
   const recent = Date.now() - new Date(p.created_at).getTime() < CHECK_WINDOW_MS;
   if (url.searchParams.get('check') === '1' && p.status === 'pending' && recent) {
     try {
-      await reconcilePurchase(reference);
+      await reconcilePurchase(reference, { notify: false }); // the page asks for the SMS separately
       ({ data: p } = await load());
     } catch (error) {
       console.error('[STATUS_RECHECK_FAILED]', reference, error);
@@ -244,6 +245,28 @@ export async function handleOldStatusLink(request: Request): Promise<Response> {
   const value = q.get('reference') ?? q.get('ref');
   const to = new URL(value ? `/success?reference=${encodeURIComponent(value)}` : '/success', request.url);
   return new Response(null, { status: 307, headers: { Location: to.toString(), ...NO_STORE } });
+}
+
+/**
+ * POST /api/purchase/notify  { reference }
+ * Sends the confirmation SMS (WiFi code) for a paid purchase. The payment
+ * page calls it once it sees the payment confirmed; it is separate from the
+ * webhook so neither request exceeds the CPU limit. At most one SMS per
+ * purchase, ever: the notification row is claimed before sending.
+ */
+export async function handlePurchaseNotify(request: Request): Promise<Response> {
+  const origin = request.headers.get('origin');
+  if (origin && origin !== new URL(request.url).origin) return json({ message: 'Request refused.' }, 403);
+  const raw = await request.text();
+  if (raw.length > 512) return json({ message: 'Request refused.' }, 413);
+  let reference = '';
+  try {
+    reference = String((JSON.parse(raw) as { reference?: unknown })?.reference ?? '');
+  } catch {
+    return json({ message: 'Request refused.' }, 400);
+  }
+  if (!REF_RE.test(reference)) return json({ message: 'Invalid reference' }, 400);
+  return json({ sms: await sendPaymentConfirmation({ reference }) });
 }
 
 // --------------------------------------------------------- Korapay webhook
@@ -313,7 +336,9 @@ export async function handleKoraWebhook(request: Request): Promise<Response> {
   let outcome = 'ignored';
   try {
     if ((event === 'charge.success' || event === 'charge.failed') && reference) {
-      outcome = (await reconcilePurchase(reference)).outcome;
+      // The SMS is sent at the payment page's request (POST /api/purchase/notify),
+      // keeping this request within the free plan's 10 ms of CPU.
+      outcome = (await reconcilePurchase(reference, { notify: false })).outcome;
     }
   } catch (error) {
     console.error('[KORA_WEBHOOK] processing failed', reference, error);
