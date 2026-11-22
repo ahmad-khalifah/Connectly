@@ -176,3 +176,63 @@ describe('staging banner', () => {
     expect(bannerFor('localhost')).toBe('Local');
   });
 });
+
+describe('POST /api/portal/lookup', () => {
+  const PHONE = '08031234567';
+  const lookup = async (body: unknown, headers: Record<string, string> = {}) => {
+    const { handlePhoneLookup } = await api();
+    const res = await handlePhoneLookup(new Request('https://x/api/portal/lookup', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) }));
+    return { status: res.status, body: await res.json() };
+  };
+  const lookupWorld = (o: { purchases?: object[]; grant?: object | null } = {}): Handler => (op) => {
+    switch (op.table) {
+      case 'routers': return { data: { id: ROUTER }, error: null };
+      case 'purchases': return { data: o.purchases ?? [{ id: 'p1' }], error: null };
+      case 'network_authorizations': return { data: o.grant === undefined ? { voucher_code: 'K7M2Q9XP', expires_at: '2099-01-01T00:00:00Z' } : o.grant, error: null };
+      case 'router_hotspot_settings': return { data: { dns_name: 'wifi.garki.example' }, error: null };
+      default: return { data: null, error: null };
+    }
+  };
+
+  it('returns a login link (not the code) when number, router and device all match', async () => {
+    fake = createFakeDb(lookupWorld());
+    const r = await lookup({ routerId: ROUTER, mac: MAC, phone: PHONE });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.connectUrl).toContain('wifi.garki.example');
+    expect(Object.keys(r.body).sort()).toEqual(['connectUrl', 'expiresAt', 'ok']);
+    const purchases = fake.ops.find((o) => o.table === 'purchases')?.filters ?? [];
+    expect(purchases).toContainEqual(['phone_number', '234803' + '1234567']);
+    expect(purchases).toContainEqual(['mac_address', MAC.toLowerCase()]);
+    expect(purchases).toContainEqual(['status', 'paid']);
+  });
+
+  it('gives one generic answer when nothing matches or the plan is over', async () => {
+    fake = createFakeDb(lookupWorld({ purchases: [] }));
+    const none = await lookup({ routerId: ROUTER, mac: MAC, phone: PHONE });
+    fake = createFakeDb(lookupWorld({ grant: null }));
+    const over = await lookup({ routerId: ROUTER, mac: MAC, phone: PHONE });
+    expect(none.status).toBe(404);
+    expect(over.status).toBe(404);
+    expect(none.body).toEqual(over.body);
+  });
+
+  it('refuses a bad number, a missing or placeholder device address, a bad router id, other sites and non-JSON without finding anything', async () => {
+    fake = createFakeDb(lookupWorld());
+    expect((await lookup({ routerId: ROUTER, mac: MAC, phone: '123' })).status).toBe(422);
+    expect((await lookup({ routerId: ROUTER, mac: '00:00:00:00:00:00', phone: PHONE })).status).toBe(404);
+    expect((await lookup({ routerId: ROUTER, phone: PHONE })).status).toBe(404);
+    expect((await lookup({ routerId: 'x', mac: MAC, phone: PHONE })).status).toBe(404);
+    expect((await lookup({ routerId: ROUTER, mac: MAC, phone: PHONE }, { origin: 'https://evil.example' })).status).toBe(403);
+    const { handlePhoneLookup } = await api();
+    const res = await handlePhoneLookup(new Request('https://x/api/portal/lookup', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' }));
+    expect(res.status).toBe(415);
+    expect(fake.ops.some((o) => o.table === 'purchases')).toBe(false);
+  });
+
+  it('is one of the routes the Worker answers itself', async () => {
+    const { customerApiRoute } = await api();
+    expect(customerApiRoute('POST', '/api/portal/lookup')).not.toBeNull();
+    expect(customerApiRoute('GET', '/api/portal/lookup')).toBeNull();
+  });
+});

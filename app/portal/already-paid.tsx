@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { KeyRound, ChevronDown, MessageCircle } from 'lucide-react';
 import CodeLogin from './code-login';
+import PhoneLookup from './phone-lookup';
 import { WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/lib/brand';
 import { cn } from '@/lib/utils';
 
@@ -12,7 +13,7 @@ import { cn } from '@/lib/utils';
  * the code box. When the router's login address is not known the box cannot
  * work, so the panel says what to do instead of showing a dead form.
  */
-export function AlreadyPaid({ loginUrl }: { loginUrl: string | null }) {
+export function AlreadyPaid({ loginUrl, routerId, mac }: { loginUrl: string | null; routerId: string; mac: string }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -34,8 +35,11 @@ export function AlreadyPaid({ loginUrl }: { loginUrl: string | null }) {
 
       {open && (
         <div id="already-paid-panel" className="border-t border-line px-4 pb-4 pt-4">
+          <PhoneLookup routerId={routerId} mac={mac} />
           {loginUrl ? (
-            <CodeLogin loginUrl={loginUrl} heading="Enter your WiFi code" />
+            <div className="mt-5 border-t border-line pt-4">
+              <CodeLogin loginUrl={loginUrl} heading="Or enter your WiFi code" />
+            </div>
           ) : (
             <p className="text-sm leading-relaxed text-muted">
               Turn your WiFi off and on, then wait for this page to open again. Your code is in the text we sent after you paid.

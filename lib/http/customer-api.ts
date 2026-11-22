@@ -14,6 +14,7 @@ import { verifyWebhookSignature, KorapayConfigError } from '@/lib/payments/korap
 import { reconcilePurchase, sendPaymentConfirmation } from '@/lib/payments/ledger';
 import { initializeKoraCheckout } from '@/lib/payments/checkout';
 import { accessForPurchase, connectLink, hotspotLoginUrl } from '@/lib/network/customer-access';
+import { normaliseNigerianMobile } from '@/lib/phone';
 import { POST as handleEnquiry } from '@/app/api/enquiries/route';
 
 type Handler = (request: Request) => Promise<Response>;
@@ -31,6 +32,7 @@ function json(body: unknown, status = 200): Response {
 export function customerApiRoute(method: string, pathname: string): Handler | null {
   const routes: Record<string, Handler> = {
     'GET /api/portal': handlePortal,
+    'POST /api/portal/lookup': handlePhoneLookup,
     'POST /api/checkout': handleCheckout,
     'GET /api/purchase/status': handlePurchaseStatus,
     'POST /api/purchase/notify': handlePurchaseNotify,
@@ -45,6 +47,7 @@ export function customerApiRoute(method: string, pathname: string): Handler | nu
 
 const MAC_RE = /^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i;
 const IDENT_RE = /^[a-z0-9][a-z0-9._-]{0,62}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/i;
 
 export type PortalPlan = {
@@ -140,6 +143,69 @@ export async function handlePortal(request: Request): Promise<Response> {
     plans: (plans ?? []) as PortalPlan[],
     loginUrl: await loginUrlP,
   } satisfies PortalView);
+}
+
+// ------------------------------------------------------------ phone lookup
+
+/**
+ * POST /api/portal/lookup  { routerId, mac, phone }
+ * For a customer who paid, lost their session and cannot find the code. It
+ * finds the plan only when ALL of these match: the router they are on, the
+ * phone number they paid with, and the address of THIS device (the one that
+ * paid). The answer is a login link for this device, never the code itself,
+ * and every failure gives the same message so the form cannot be used to
+ * find out whose number has a plan.
+ */
+export async function handlePhoneLookup(request: Request): Promise<Response> {
+  const origin = request.headers.get('origin');
+  if (origin && origin !== new URL(request.url).origin) return json({ ok: false, error: 'Request refused.' }, 403);
+  if (!(request.headers.get('content-type') ?? '').includes('application/json')) return json({ ok: false, error: 'Request refused.' }, 415);
+  const raw = await request.text();
+  if (raw.length > MAX_BODY) return json({ ok: false, error: 'Request refused.' }, 413);
+  let body: { routerId?: unknown; mac?: unknown; phone?: unknown };
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return json({ ok: false, error: 'Request refused.' }, 400);
+  }
+
+  const phone = normaliseNigerianMobile(body.phone);
+  if (!phone) return json({ ok: false, error: 'Please enter the mobile number you paid with, for example 0803 123 4567.' }, 422);
+
+  const NOT_FOUND = { ok: false, error: 'We could not find a running plan for this number on this phone. Check the number, or message us on WhatsApp.' };
+  const routerId = typeof body.routerId === 'string' ? body.routerId : '';
+  const mac = typeof body.mac === 'string' && MAC_RE.test(body.mac) ? body.mac.toLowerCase().replace(/-/g, ':') : '';
+  if (!UUID_RE.test(routerId) || !mac || mac === '00:00:00:00:00:00') return json(NOT_FOUND, 404);
+
+  const { data: router } = await db.from('routers').select('id').eq('id', routerId).maybeSingle();
+  if (!router) return json(NOT_FOUND, 404);
+
+  const { data: purchases } = await db
+    .from('purchases')
+    .select('id')
+    .eq('status', 'paid')
+    .eq('router_id', router.id)
+    .eq('phone_number', phone)
+    .eq('mac_address', mac)
+    .order('created_at', { ascending: false })
+    .limit(5);
+  const ids = (purchases ?? []).map((p) => String(p.id));
+  if (ids.length === 0) return json(NOT_FOUND, 404);
+
+  const { data: grant } = await db
+    .from('network_authorizations')
+    .select('voucher_code, expires_at')
+    .in('purchase_id', ids)
+    .eq('router_id', router.id)
+    .eq('status', 'active')
+    .gt('expires_at', new Date().toISOString())
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!grant?.voucher_code) return json(NOT_FOUND, 404);
+
+  const loginUrl = await hotspotLoginUrl(router.id as string);
+  return json({ ok: true, connectUrl: connectLink(loginUrl, String(grant.voucher_code)), expiresAt: String(grant.expires_at) });
 }
 
 // ---------------------------------------------------------------- checkout

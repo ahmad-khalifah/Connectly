@@ -149,7 +149,7 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
 
   return (
     <div className="space-y-8">
-      <AlreadyPaid loginUrl={loginUrl} />
+      <AlreadyPaid loginUrl={loginUrl} routerId={routerId} mac={mac} />
 
       <form
         onSubmit={(e) => { e.preventDefault(); if (selected) goTo('phone'); }}
