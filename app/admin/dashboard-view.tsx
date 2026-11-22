@@ -67,11 +67,15 @@ export default function DashboardView() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description={`Figures come straight from the database, in Lagos time${locationName ? `, for ${locationName}` : ', for all locations'}. Hover a figure to see how it is worked out.`}
+        description={`Sales and WiFi at a glance, in Lagos time${locationName ? `, for ${locationName}` : ', for all locations'}. Hover a figure to see how it is worked out.`}
       />
       <DashboardFilters period={period} locationId={locationId} locations={locations} />
 
-      {alerts.loaded.state === 'ready' && alerts.loaded.data.length > 0 && <AlertsPanel alerts={alerts.loaded.data} />}
+      {alerts.loaded.state === 'ready' && (
+        <section aria-label="Status" className="space-y-2">
+          <AlertsPanel alerts={alerts.loaded.data} quietText="Everything is working. Customers can pay and get online." />
+        </section>
+      )}
 
       {failed ? (
         <LoadError message={failed.loaded.state === 'error' ? failed.loaded.message : 'Not found'} onRetry={() => parts.forEach((p) => p.reload())} />
@@ -87,8 +91,9 @@ export default function DashboardView() {
 
       <SidePanels side={side.loaded.state === 'ready' ? side.loaded.data : null} locationId={locationId} locationName={locationName ?? null} now={now} />
 
-      <Panel title="How these figures are calculated">
-        <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+      <details className="rounded-[var(--radius-panel)] border border-line bg-surface">
+        <summary className="min-h-12 cursor-pointer list-none px-5 py-3.5 text-sm font-semibold text-ink">How these figures are calculated</summary>
+        <dl className="grid gap-x-8 gap-y-3 border-t border-line p-5 text-sm sm:grid-cols-2">
           {DEFINITIONS.map((d) => (
             <div key={d.name}>
               <dt className="font-semibold text-ink">{d.name}</dt>
@@ -96,7 +101,7 @@ export default function DashboardView() {
             </div>
           ))}
         </dl>
-      </Panel>
+      </details>
     </div>
   );
 }
@@ -106,13 +111,12 @@ function SidePanels({ side, locationId, locationName, now }: { side: Side | null
   const routers = (side?.routers ?? []).filter((r) => !locationId || r.location_id === locationId);
   return (
     <div className="grid gap-6 lg:grid-cols-5">
-      <Panel title="Recent activity" description="Latest admin actions, payments and network events. Refreshes when you reload the page." flush className="lg:col-span-3">
+      <Panel title="Recent activity" description="The latest payments and changes. Reload the page to refresh." flush className="lg:col-span-3">
         <ul className="divide-y divide-line">
           {activity.map((e) => (
             <li key={e.id} className="flex items-start justify-between gap-4 px-5 py-3 text-sm">
               <span className="min-w-0">
                 <span className="block text-ink">{e.message}</span>
-                <span className="text-[12.5px] text-subtle">{e.event_type}</span>
               </span>
               <span className="tnum shrink-0 text-[12.5px] text-muted">{lagosTime(e.created_at)}</span>
             </li>
@@ -121,7 +125,7 @@ function SidePanels({ side, locationId, locationName, now }: { side: Side | null
           {!side && <li className="px-5 py-8"><Loading /></li>}
         </ul>
       </Panel>
-      <Panel title="Routers" description="Health from the controller's check every minute. A router not checked for 5 minutes shows No recent check." flush className="lg:col-span-2"
+      <Panel title="Routers" description="Each router reports in every few seconds. One that has been silent for 5 minutes shows No recent check." flush className="lg:col-span-2"
         action={<Link prefetch={false} href="/admin/network" className="text-sm font-semibold text-brand hover:underline">Manage</Link>}>
         <ul className="divide-y divide-line">
           {routers.map((r) => (
@@ -149,63 +153,78 @@ function SidePanels({ side, locationId, locationName, now }: { side: Side | null
 
 function Figures({ m, periodLabel, filtered }: { m: ReturnType<typeof computeMetrics>; periodLabel: string; filtered: boolean }) {
   const { money, customers, network } = m;
+  const routersActive = network.routersOnline + network.routersOffline + network.routersUnchecked;
+  const costs = money.fees + money.expenses;
   return (
     <>
+      {/* Right now: the three things an owner checks first, always for today. */}
+      <section aria-label="Right now" className="overflow-hidden rounded-[var(--radius-panel)] bg-burgundy-950 text-white">
+        <dl className="grid divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="px-6 py-5" title={how('Revenue')}>
+            <dt className="text-[13px] font-medium text-sand">Earned today</dt>
+            <dd className="tnum mt-1 text-[34px] font-bold leading-tight tracking-[-0.02em]">{naira(money.windows.today)}</dd>
+          </div>
+          <div className="px-6 py-5" title={how('Plans running now')}>
+            <dt className="text-[13px] font-medium text-sand">Customers online on a plan</dt>
+            <dd className="tnum mt-1 text-[34px] font-bold leading-tight tracking-[-0.02em]">{customers.plansRunning}</dd>
+          </div>
+          <div className="px-6 py-5" title={how('Router service')}>
+            <dt className="text-[13px] font-medium text-sand">Routers working</dt>
+            <dd className="tnum mt-1 text-[34px] font-bold leading-tight tracking-[-0.02em]">
+              {network.routersOnline}<span className="text-[20px] font-semibold text-white/60"> of {routersActive}</span>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
       <section aria-labelledby="money" className="space-y-3">
         <h2 id="money" className="text-lg font-bold text-ink">Money <span className="font-normal text-muted">({periodLabel})</span></h2>
-        <StatGrid cols={5}>
-          <Stat label="Revenue" value={naira(money.revenue)} how={how('Revenue')} />
-          <Stat label="Korapay fees" value={naira(money.fees)} how={how('Korapay fees')} />
-          <Stat label="Revenue after fees" value={naira(money.afterFees)} how={how('Revenue after fees')} />
-          <Stat label="Expenses" value={naira(money.expenses)} how={how('Expenses')} note={money.expenses === 0 ? 'None recorded' : undefined} />
-          <Stat label="Net profit" value={naira(money.netProfit)} tone={money.netProfit < 0 ? 'bad' : undefined} how={how('Net profit')} />
-        </StatGrid>
-        <StatGrid cols={2}>
-          <Stat label="Successful payments" value={money.successfulPayments} how={how('Successful payments')} />
-          <Stat label="Failed payments" value={money.failedPayments} tone={money.failedPayments > 0 ? 'warn' : undefined} how={how('Failed payments')} />
+        <StatGrid cols={3}>
+          <Stat label="Revenue" value={naira(money.revenue)} how={how('Revenue')}
+            note={`${money.successfulPayments} payment${money.successfulPayments === 1 ? '' : 's'}${money.failedPayments ? `, ${money.failedPayments} failed` : ''}`} />
+          <Stat label="Costs" value={naira(costs)} how={how('Net profit')}
+            note={`Korapay fees ${naira(money.fees)}${money.expenses ? `, expenses ${naira(money.expenses)}` : ', no expenses recorded'}`} />
+          <Stat label="Profit" value={naira(money.netProfit)} tone={money.netProfit < 0 ? 'bad' : 'ok'} how={how('Net profit')} />
         </StatGrid>
       </section>
 
-      <Panel title="Revenue" description={m.seriesUnit === 'day' ? `Per day, ${periodLabel}.` : 'Per month, all time.'}>
-        <dl className="mb-5 grid grid-cols-2 gap-4 border-b border-line pb-5 sm:grid-cols-4">
-          {([['Today', money.windows.today], ['Last 7 days', money.windows.last7], ['This month', money.windows.month], ['All time', money.windows.all]] as const).map(([l, v]) => (
-            <div key={l}>
-              <dt className="text-[13px] text-muted">{l}</dt>
-              <dd className="tnum text-lg font-bold text-ink">{naira(v)}</dd>
-            </div>
-          ))}
-        </dl>
+      <Panel title="Revenue over time" description={m.seriesUnit === 'day' ? `Per day, ${periodLabel}.` : 'Per month, all time.'}>
         <RevenueChart data={m.series} unit={m.seriesUnit} />
       </Panel>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section aria-labelledby="customers" className="space-y-3">
-          <h2 id="customers" className="text-lg font-bold text-ink">Customers</h2>
-          <StatGrid cols={2}>
-            <Stat label="Plans running now" value={customers.plansRunning} how={how('Plans running now')} />
-            <Stat label="Customers on a plan" value={customers.customersOnPlans} how={how('Customers on a plan')} />
+      <section aria-labelledby="customers" className="space-y-3">
+        <h2 id="customers" className="text-lg font-bold text-ink">Customers</h2>
+        <StatGrid cols={3}>
+          <Stat label="On a plan now" value={customers.customersOnPlans} how={how('Customers on a plan')} />
+          <Stat label={`New customers, ${periodLabel}`} value={customers.newCustomers} note={filtered ? 'All locations' : undefined} how={how('New customers')} />
+          <Stat label="All customers" value={customers.registered} note={filtered ? 'All locations' : undefined} how={how('Registered customers')} />
+        </StatGrid>
+      </section>
+
+      <details className="rounded-[var(--radius-panel)] border border-line bg-surface">
+        <summary className="min-h-12 cursor-pointer list-none px-5 py-3.5 text-sm font-semibold text-ink">More figures</summary>
+        <div className="space-y-4 border-t border-line p-5">
+          <StatGrid cols={4}>
             <Stat label={`Plans ended, ${periodLabel}`} value={customers.plansEnded} how={how('Plans ended')} />
             <Stat label={`Ended early, ${periodLabel}`} value={customers.endedEarly} how={how('Ended early')} />
-            <Stat label="Registered customers" value={customers.registered} note={filtered ? 'All locations' : 'All time'} how={how('Registered customers')} />
-            <Stat label={`New customers, ${periodLabel}`} value={customers.newCustomers} note={filtered ? 'All locations' : undefined} how={how('New customers')} />
-          </StatGrid>
-        </section>
-        <section aria-labelledby="network" className="space-y-3">
-          <h2 id="network" className="text-lg font-bold text-ink">Network</h2>
-          <StatGrid cols={2}>
-            <Stat label="Routers online" value={network.routersOnline} tone={network.routersOnline > 0 ? 'ok' : undefined} how={how('Routers online and offline')}
-              note={[network.routersUnchecked && `${network.routersUnchecked} not checked in the last 5 minutes`, network.routersNotActive && `${network.routersNotActive} registered, not active yet`].filter(Boolean).join('. ') || undefined} />
-            <Stat label="Routers offline" value={network.routersOffline} tone={network.routersOffline > 0 ? 'bad' : undefined} how={how('Routers online and offline')} />
-            <Stat label="Controller" value={network.controllerLive ? 'Running' : 'Stopped'} tone={network.controllerLive ? 'ok' : 'bad'} how={how('Controller')} />
+            <Stat label="Devices online now" value={network.devicesOnline} how={how('Devices online now')} note={network.controllerLive ? undefined : 'Router service stopped: not current'} />
             <Stat label="Locations open" value={`${network.locationsOpen} of ${network.locationsTotal}`} note="Set by an admin" how={how('Locations open')} />
-            <Stat label="Jobs waiting" value={network.jobsWaiting} how={how('Jobs waiting')} />
-            <Stat label={`Jobs that gave up, ${periodLabel}`} value={network.jobsGaveUp} tone={network.jobsGaveUp > 0 ? 'bad' : undefined} how={how('Jobs that gave up')} />
-            <Stat label="Devices online now" value={network.devicesOnline} how={how('Devices online now')}
-              note={network.controllerLive ? undefined : 'Controller stopped: not current'} />
-            <Stat label="Data use" unmeasured how={how('Data use')} />
+            <Stat label="Router service" value={network.controllerLive ? 'Working' : 'Stopped'} tone={network.controllerLive ? 'ok' : 'bad'} how={how('Router service')} />
+            <Stat label="Routers offline" value={network.routersOffline} tone={network.routersOffline > 0 ? 'bad' : undefined} how={how('Routers online and offline')}
+              note={[network.routersUnchecked && `${network.routersUnchecked} not checked in the last 5 minutes`, network.routersNotActive && `${network.routersNotActive} registered, not active yet`].filter(Boolean).join('. ') || undefined} />
+            <Stat label="Router tasks waiting" value={network.jobsWaiting} how={how('Router tasks waiting')} />
+            <Stat label={`Router tasks that gave up, ${periodLabel}`} value={network.jobsGaveUp} tone={network.jobsGaveUp > 0 ? 'bad' : undefined} how={how('Router tasks that gave up')} />
           </StatGrid>
-        </section>
-      </div>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {([['Today', money.windows.today], ['Last 7 days', money.windows.last7], ['This month', money.windows.month], ['All time', money.windows.all]] as const).map(([l, v]) => (
+              <div key={l}>
+                <dt className="text-[13px] text-muted">Revenue, {l.toLowerCase()}</dt>
+                <dd className="tnum text-lg font-bold text-ink">{naira(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </details>
     </>
   );
 }

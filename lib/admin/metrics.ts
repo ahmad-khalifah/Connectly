@@ -273,10 +273,10 @@ export const DEFINITIONS: { name: string; how: string }[] = [
   { name: 'New customers', how: 'Customers whose first payment was in the period. Not filtered by location.' },
   { name: 'Locations open', how: 'Locations marked active (selling plans), out of all locations. Set by an admin, not measured.' },
   { name: 'Routers online and offline', how: 'Active routers by the controller\'s health check, run every minute. A router not checked in the last 5 minutes is counted as not checked, not as online.' },
-  { name: 'Controller', how: 'Running if its last heartbeat was within the last 2 minutes.' },
-  { name: 'Jobs waiting', how: 'Router jobs queued, running, or failed and waiting to retry.' },
-  { name: 'Jobs that gave up', how: 'Router jobs that ran out of retries in the period.' },
-  { name: 'Devices online now', how: 'Devices logged in to a router\'s hotspot, as the controller read them from the router in the last 5 minutes (it reads every minute). Shows 0 while the controller is stopped.' },
+  { name: 'Router service', how: 'Working when every active router is checking in (each router reports every 15 seconds, and is treated as stopped after 3 minutes of silence).' },
+  { name: 'Router tasks waiting', how: 'Router tasks queued, running, or failed and waiting to retry.' },
+  { name: 'Router tasks that gave up', how: 'Router tasks that ran out of retries in the period.' },
+  { name: 'Devices online now', how: 'Devices logged in to a router\'s hotspot, as read from the router in the last 5 minutes. Shows 0 while the router service is stopped.' },
   { name: 'Data use', how: 'Not yet measured: the controller records each session\'s bytes, but not per period yet.' },
 ];
 

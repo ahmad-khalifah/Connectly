@@ -164,7 +164,7 @@ describe('operational alerts', () => {
       'Network Controller is not running',
       'Router Garki is offline',
       '2 paid customers are waiting for access',
-      '1 controller job failed',
+      '1 router task failed',
       '3 SMS failed',
     ]);
   });
@@ -176,6 +176,16 @@ describe('operational alerts', () => {
     expect(alerts).toHaveLength(1);
     expect(alerts[0]).toMatchObject({ severity: 'info', title: 'SMS pending provider approval' });
     expect(alerts[0].detail).toMatch(/Payments and WiFi work as normal.*3 messages were not sent/);
+  });
+  it('does not blame the old controller when the router runs its own agent and is checking in', async () => {
+    fake = createFakeDb(world({ routers: [{ id: ROUTER, name: 'Garki', identifier: 'cx-garki-01', status: 'online', agent_enabled: true, agent_last_seen_at: '2026-11-18T11:59:50Z' }], heartbeat: '2026-11-18T08:00:00Z' }));
+    const { loadAlerts } = await import('@/lib/admin/alerts');
+    expect(await loadAlerts(NOW)).toEqual([]);
+  });
+  it('says so once, in plain words, when an agent router goes silent', async () => {
+    fake = createFakeDb(world({ routers: [{ id: ROUTER, name: 'Garki', identifier: 'cx-garki-01', status: 'offline', agent_enabled: true, agent_last_seen_at: '2026-11-18T11:50:00Z' }], heartbeat: '2026-11-18T08:00:00Z' }));
+    const { loadAlerts } = await import('@/lib/admin/alerts');
+    expect((await loadAlerts(NOW)).map((a) => a.title)).toEqual(['Garki has stopped checking in']);
   });
   it('does not call a missing controller a problem before any router is active', async () => {
     fake = createFakeDb(world({ routers: [], heartbeat: null }));

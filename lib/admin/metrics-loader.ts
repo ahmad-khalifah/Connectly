@@ -1,4 +1,5 @@
 import { db } from '@/lib/db/client';
+import { agentLive } from '@/lib/admin/alerts';
 import { isControllerLive } from '@/lib/network/jobs';
 import { periodRange, type CustomerCounts, type GrantCounts, type MetricInput, type PaidBucket, type Period, type RevenueWindows } from './metrics';
 import { fetchAll as all } from '@/lib/db/fetch-all';
@@ -75,7 +76,7 @@ export async function loadPeoplePart(period: Period, locationId: string | null, 
 
 export async function loadNetworkPart(now: Date): Promise<NetworkPart> {
   const [routers, jobs, locations, heartbeat, sessions] = await Promise.all([
-    all<{ id: string; status: string | null; lifecycle_status: string; location_id: string | null; last_seen_at: string | null }>((f, t) => db.from('routers').select('id, status, lifecycle_status, location_id, last_seen_at').range(f, t)),
+    all<{ id: string; status: string | null; lifecycle_status: string; location_id: string | null; last_seen_at: string | null; agent_enabled: boolean | null; agent_last_seen_at: string | null }>((f, t) => db.from('routers').select('id, status, lifecycle_status, location_id, last_seen_at, agent_enabled, agent_last_seen_at').range(f, t)),
     all<{ status: string; updated_at: string | null; finished_at: string | null; router_id: string }>((f, t) => db.from('controller_jobs').select('status, updated_at, finished_at, router_id').in('status', ['queued', 'running', 'failed', 'dead']).range(f, t)),
     all((f, t) => db.from('locations').select('id, is_active').range(f, t)),
     db.from('controller_instances').select('last_heartbeat_at').order('last_heartbeat_at', { ascending: false }).limit(1),
@@ -87,7 +88,13 @@ export async function loadNetworkPart(now: Date): Promise<NetworkPart> {
     routers: routers.map(({ status, lifecycle_status, location_id, last_seen_at }) => ({ status, lifecycle_status, location_id, last_seen_at })),
     jobs: jobs.map((j) => ({ status: j.status, updated_at: j.updated_at, finished_at: j.finished_at, location_id: routerLocation.get(j.router_id) ?? null })),
     locations: locations as MetricInput['locations'],
-    controllerLive: Boolean(last && isControllerLive(last, now.getTime())),
+    // "Working" = every active router is handled by a live agent, or the old controller is running.
+    controllerLive: (() => {
+      const active = routers.filter((r) => r.lifecycle_status === 'active');
+      const rest = active.filter((r) => !r.agent_enabled);
+      const agentsOk = active.filter((r) => r.agent_enabled).every((r) => agentLive(r, now.getTime()));
+      return agentsOk && (rest.length === 0 ? active.length > 0 : Boolean(last && isControllerLive(last, now.getTime())));
+    })(),
     sessions,
   };
 }

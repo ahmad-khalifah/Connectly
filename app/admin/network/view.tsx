@@ -36,7 +36,7 @@ export default function RoutersView() {
     <div className="space-y-6">
       <PageHeader
         title="Routers"
-        description="The MikroTik routers at each site, and the Network Controller that sets them up, adds and removes customer codes, and checks their health."
+        description="The routers at each location and whether they are working."
         actions={<ButtonLink href="/admin/network/routers/new">Register a router</ButtonLink>}
       />
       <ViewState loaded={loaded} reload={reload}>
@@ -44,39 +44,32 @@ export default function RoutersView() {
           <>
       {failed && <Notice tone="bad" title="Some network data could not be loaded">Refresh to try again.</Notice>}
 
-      <StatGrid cols={3}>
+      {alerts.loaded.state === 'ready' && <AlertsPanel alerts={alerts.loaded.data} quietText="Everything is working. Customers can pay and get online." />}
+
+      <StatGrid cols={2}>
         <Stat
-          label="Controller"
-          value={controller.state === 'running' ? 'Running' : controller.state === 'stopped' ? 'Not responding' : 'Not started'}
-          tone={controller.state === 'running' ? 'ok' : 'bad'}
-          note={controller.state === 'running'
-            ? `${controller.id}, version ${controller.version ?? '?'}, heartbeat ${ago(controller.heartbeat)}${controller.info?.production !== true ? `. Test controller (${controller.info?.environment ?? 'unknown'}): not for paying customers` : ''}`
-            : controller.state === 'stopped' ? `Last heartbeat ${ago(controller.heartbeat)}. Router actions wait in the queue until it is back.` : 'Router actions wait in the queue until it runs.'}
+          label="Routers online"
+          value={`${routers.filter((r) => r.lifecycle_status === 'active' && r.status === 'online').length} of ${routers.filter((r) => r.lifecycle_status === 'active').length}`}
+          tone={routers.some((r) => r.lifecycle_status === 'active' && r.status !== 'online') ? 'bad' : 'ok'}
+          note="Routers that are on and have reported in recently."
         />
         <Stat
-          label="Router jobs waiting"
+          label="Router tasks waiting"
           value={(jobCounts.queued ?? 0) + (jobCounts.running ?? 0) + (jobCounts.failed ?? 0)}
-          note={<>{jobCounts.failed ?? 0} retrying, {jobCounts.dead ?? 0} gave up. <Link prefetch={false} href="/admin/network/jobs" className="font-semibold text-brand hover:underline">Open jobs</Link></>}
+          note={<>{jobCounts.failed ?? 0} retrying, {jobCounts.dead ?? 0} gave up. <Link prefetch={false} href="/admin/network/jobs" className="font-semibold text-brand hover:underline">See all</Link></>}
           tone={(jobCounts.dead ?? 0) > 0 ? 'bad' : undefined}
         />
-        <Stat
-          label="Connection"
-          value={settings?.controller_endpoint ? 'WireGuard' : 'Local network'}
-          note={`${settings?.controller_endpoint ? `Controller at ${settings.controller_endpoint}` : 'No public controller address yet (set when a server is deployed)'}. Tunnel range ${settings?.tunnel_cidr ?? '—'}${settings?.credential_key_id ? `, credential key ${settings.credential_key_id}` : ', no credential key yet'}.`}
-        />
       </StatGrid>
-
-      {alerts.loaded.state === 'ready' && <AlertsPanel alerts={alerts.loaded.data} quietText="No network problems found." />}
 
       <TableFrame>
         <thead>
           <tr>
             <th className={th}>Router</th>
             <th className={th}>Location</th>
-            <th className={th}>Stage</th>
-            <th className={th}>Health</th>
-            <th className={th}>Reached by</th>
-            <th className={th}>Last connection test</th>
+            <th className={th}>Status</th>
+            <th className={th}>Working</th>
+            <th className={th}>Connected</th>
+            <th className={th}>Last check</th>
           </tr>
         </thead>
         <tbody>
@@ -100,6 +93,26 @@ export default function RoutersView() {
           {routers.length === 0 && <EmptyRow cols={6}>No routers yet. Register the first one to start.</EmptyRow>}
         </tbody>
       </TableFrame>
+
+      <details className="rounded-[var(--radius-panel)] border border-line bg-surface">
+        <summary className="min-h-12 cursor-pointer list-none px-5 py-3.5 text-sm font-semibold text-ink">Technical details</summary>
+        <dl className="grid gap-x-8 gap-y-3 border-t border-line px-5 py-4 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="font-semibold text-ink">Old network controller</dt>
+            <dd className="mt-0.5 text-muted">
+              {controller.state === 'running'
+                ? `Running, last heard ${ago(controller.heartbeat)}.`
+                : controller.state === 'stopped' ? `Stopped (last heard ${ago(controller.heartbeat)}). Not needed while routers run their own agent.` : 'Not started. Not needed while routers run their own agent.'}
+            </dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-ink">Connection method</dt>
+            <dd className="mt-0.5 text-muted">
+              {settings?.controller_endpoint ? `Tunnel to ${settings.controller_endpoint}` : 'Local network'}. Tunnel range {settings?.tunnel_cidr ?? '—'}{settings?.credential_key_id ? `, key ${settings.credential_key_id}` : ''}.
+            </dd>
+          </div>
+        </dl>
+      </details>
           </>
         )}
       </ViewState>
