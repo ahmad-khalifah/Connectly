@@ -23,13 +23,14 @@ const SECTORS: Sector[] = [
     lead: 'Offices, commercial spaces and trading centres.',
     text: 'Staff, customers and tenants all expect to get online. We provide dependable connectivity as a managed service, with clear visibility for the people responsible for the space.',
     points: ['Reliable access for staff and visitors', 'Managed so you do not have to', 'Simple reporting and a point of contact'],
+    photo: { src: '/site/businesses.jpg', alt: 'A team of colleagues working with laptops around a table in a modern meeting room', w: 1200, h: 801 },
   },
   {
     title: 'Residential communities',
     lead: 'Estates and shared housing.',
     text: 'Residents want connectivity that simply works. We plan and manage networks for shared housing so access is consistent across the community.',
     points: ['Planned around how residents live', 'Consistent access across the community', 'Support when residents need it'],
-    photo: { src: '/site/campus.jpg', alt: 'Friends studying together with laptops outdoors', w: 626, h: 417 },
+    photo: { src: '/site/residential.jpg', alt: 'Looking up between modern apartment buildings towards the sky', w: 1200, h: 800 },
   },
   {
     title: 'Underserved markets and communities',

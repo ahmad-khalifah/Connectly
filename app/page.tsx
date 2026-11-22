@@ -20,8 +20,8 @@ const CAPABILITIES = [
 
 const AUDIENCES = [
   { title: 'Institutions', text: 'Universities, colleges and schools.', photo: '/site/classroom.jpg', w: 736, h: 414 },
-  { title: 'Businesses', text: 'Offices, commercial spaces and trading centres.', photo: null, w: 0, h: 0 },
-  { title: 'Residential communities', text: 'Estates and shared housing.', photo: '/site/campus.jpg', w: 626, h: 417 },
+  { title: 'Businesses', text: 'Offices, commercial spaces and trading centres.', photo: '/site/businesses.jpg', w: 1200, h: 801 },
+  { title: 'Residential communities', text: 'Estates and shared housing.', photo: '/site/residential.jpg', w: 1200, h: 800 },
   { title: 'Underserved markets', text: 'Communities where reliable access is hardest to find.', photo: '/site/community.jpg', w: 626, h: 417 },
 ];
 
