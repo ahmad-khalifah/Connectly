@@ -12,7 +12,7 @@
 // controller was down.
 
 import type { Db, RouterRow, SessionSnapshot } from './db.ts';
-import { clientFor, type JobContext } from './jobs.ts';
+import { agentGrantId, clientFor, type JobContext } from './jobs.ts';
 import { parseRouterOsDuration, RouterError, type RouterClient } from './routeros.ts';
 import { KeyError } from './keys.ts';
 
@@ -79,6 +79,8 @@ export async function reconcileRouter(router: RouterRow, ctx: JobContext): Promi
 
   const removed: string[] = [];
   for (const u of onRouter) {
+    // Users made by the router agent are the agent's to end; never a stray.
+    if (agentGrantId(u.comment)) continue;
     const grantId = u.comment!.slice('connectly:'.length);
     if (liveById.has(grantId)) continue;
     for (const s of await client.listActive(u.name)) await client.removeActive(s.id);
@@ -86,7 +88,7 @@ export async function reconcileRouter(router: RouterRow, ctx: JobContext): Promi
     removed.push(u.name);
   }
 
-  const present = new Set(onRouter.map((u) => u.comment));
+  const present = new Set(onRouter.map((u) => { const a = agentGrantId(u.comment); return a ? `connectly:${a}` : u.comment; }));
   const requeued: string[] = [];
   const hour = Math.floor((ctx.now?.() ?? new Date()).getTime() / 3_600_000);
   for (const g of live) {

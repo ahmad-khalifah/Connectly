@@ -10,6 +10,22 @@ import { applyHotspot, planHotspot } from './hotspot.ts';
 
 export const ROUTER_API_USER = 'connectly-ctrl';
 
+// A user made by the on-router agent is tagged connectly:<grant id>:<end time,
+// unix seconds>. The router agent and its on-router sweeper own those users,
+// so the controller must recognise them and never treat them as strays.
+const AGENT_COMMENT = /^connectly:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):\d{9,12}$/i;
+
+/** The grant id of an agent-made user, or null for anything else. */
+export function agentGrantId(comment: string | undefined): string | null {
+  const m = comment ? AGENT_COMMENT.exec(comment) : null;
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/** True when this comment tags the user as belonging to that grant, in either form. */
+export function isCommentForGrant(comment: string | undefined, grantId: string): boolean {
+  return comment === `connectly:${grantId}` || agentGrantId(comment) === grantId.toLowerCase();
+}
+
 export type JobOutcome =
   | { ok: true; result: Record<string, unknown>; routerResponse?: Record<string, unknown> }
   | { ok: false; error: string; retryInSeconds?: number; result?: Record<string, unknown> };
@@ -113,7 +129,7 @@ async function provision(job: Job, router: RouterRow, ctx: JobContext): Promise<
     const existing = await client.findHotspotUser(grant.hotspot_username);
     let userId: string;
     if (existing) {
-      if (existing.comment && existing.comment !== fields.comment) {
+      if (existing.comment && !isCommentForGrant(existing.comment, grant.id)) {
         return { ok: false, error: `A hotspot user named ${grant.hotspot_username} already exists for something else; not touched.`, retryInSeconds: -1 };
       }
       await client.updateHotspotUser(existing.id, fields);
@@ -177,7 +193,7 @@ async function revoke(job: Job, router: RouterRow, ctx: JobContext): Promise<Job
         removedSessions.push(s.id);
       }
       const user = await client.findHotspotUser(grant.hotspot_username);
-      if (user && (!user.comment || user.comment === `connectly:${grant.id}`)) {
+      if (user && (!user.comment || isCommentForGrant(user.comment, grant.id))) {
         await client.removeHotspotUser(user.id);
         removedUser = true;
       }

@@ -244,6 +244,35 @@ describe('controller against a local copy of the database', { skip }, () => {
     assert.ok(r.fake.users.has(live.voucher));
   });
 
+  test('reconciliation leaves router-agent users alone: neither removed as strays nor re-queued as missing', async () => {
+    const r = await register('cx-site-05b', 'active');
+    const live = await paidPurchase(t.admin, r.id);
+    await drain();
+    // The agent took over: the user now carries connectly:<grant>:<end time>.
+    const u = r.fake.users.get(live.voucher)!;
+    u.comment = `${u.comment}:${Math.floor(Date.now() / 1000) + 3600}`;
+    // An agent user whose grant is not live here (e.g. staging data): still not ours to remove.
+    r.fake.users.set('AGENT001', { id: '*A', name: 'AGENT001', password: 'x', comment: `connectly:${crypto.randomUUID()}:${Math.floor(Date.now() / 1000) + 600}` });
+    const router = (await db.getRouter(r.id))!;
+    const out = await reconcileRouter(router, ctx);
+    assert.deepEqual(out.removed, []);
+    assert.deepEqual(out.requeued, []);
+    assert.ok(r.fake.users.has(live.voucher));
+    assert.ok(r.fake.users.has('AGENT001'));
+  });
+
+  test('rolling back from the agent: revoke removes a user the agent tagged with an end time', async () => {
+    const r = await register('cx-site-05c', 'active');
+    const p = await paidPurchase(t.admin, r.id);
+    await drain();
+    const u = r.fake.users.get(p.voucher)!;
+    u.comment = `${u.comment}:${Math.floor(Date.now() / 1000) + 3600}`;
+    await t.admin.query(`update network_authorizations set expires_at = now() - interval '1 minute' where id = $1`, [p.grantId]);
+    assert.ok((await ctl.sweep()) >= 1);
+    await drain();
+    assert.equal(r.fake.users.has(p.voucher), false);
+  });
+
   test('health: three missed polls mark a router offline and log it; it recovers when reachable', async () => {
     const r = await register('cx-site-06', 'active');
     const router = (await db.getRouter(r.id))!;
