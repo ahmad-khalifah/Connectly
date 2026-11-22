@@ -3,14 +3,15 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, MessageCircle } from 'lucide-react';
 import { Wordmark } from '@/components/ui/lens-mark';
 import { buttonClass } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { WHATSAPP_URL } from '@/lib/brand';
 
 const NAV = [
-  { href: '/wifi', label: 'Managed WiFi' },
-  { href: '/#about', label: 'About' },
+  { href: '/#help', label: 'Help' },
+  { href: '/wifi', label: 'WiFi for business' },
   { href: '/#contact', label: 'Contact' },
 ];
 
@@ -28,17 +29,20 @@ export function SiteHeader() {
               {n.label}
             </Link>
           ))}
-          <Link prefetch={false} href="/#contact" className={buttonClass({ size: 'sm' })}>Talk to us</Link>
+          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className={buttonClass({ size: 'md' })}>
+            <MessageCircle className="h-4 w-4" aria-hidden /> WhatsApp us
+          </a>
         </nav>
-        <button type="button" className="rounded-md p-2 md:hidden" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? 'Close menu' : 'Open menu'}>
+        <button type="button" className="flex h-11 items-center gap-2 rounded-md px-3 text-[15px] font-semibold text-ink hover:bg-canvas md:hidden" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? 'Close menu' : 'Open menu'}>
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          Menu
         </button>
       </div>
       {open && (
         <nav aria-label="Main" className="border-t border-line px-5 pb-5 pt-2 md:hidden">
           <ul className="divide-y divide-line">
             {NAV.map((n) => (
-              <li key={n.href}><Link prefetch={false} href={n.href} onClick={() => setOpen(false)} className="block py-3 text-base font-semibold text-ink">{n.label}</Link></li>
+              <li key={n.href}><Link prefetch={false} href={n.href} onClick={() => setOpen(false)} className="block py-4 text-lg font-semibold text-ink">{n.label}</Link></li>
             ))}
           </ul>
         </nav>

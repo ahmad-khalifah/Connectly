@@ -1,4 +1,4 @@
-import { INSTAGRAM_HANDLE, INSTAGRAM_URL } from '@/lib/brand';
+import { WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/lib/brand';
 
 const QUESTIONS: { q: string; a: React.ReactNode }[] = [
   {
@@ -37,11 +37,11 @@ export function HelpSection() {
           ))}
         </div>
         <p className="mt-5 text-sm leading-relaxed text-muted">
-          Still stuck? Message Connectly on Instagram at{' '}
-          <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand underline underline-offset-2">
-            {INSTAGRAM_HANDLE}
+          Still stuck? Message our help line on WhatsApp:{' '}
+          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand underline underline-offset-2">
+            {WHATSAPP_DISPLAY}
           </a>
-          . Instagram opens once you are online; before that, note the handle and your payment reference.
+          . Have your payment reference ready.
         </p>
       </div>
     </section>

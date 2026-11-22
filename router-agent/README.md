@@ -21,9 +21,22 @@ switched off (about a minute after the plan ends, the sweeper runs once a
 minute), and the backend catching up afterwards. Device auto-login was only
 tested as "device not seen" (no real client on the lab router).
 
-NOT yet tested on the physical L009 or on production. Test order there:
-connectivity only, a dry run (`cxDry=true`), a real additive test, then
-production.
+Tested on the PHYSICAL L009 against STAGING, 22 Nov 2026: connectivity, dry run,
+real additive provision, report back, backend revoke at expiry, offline expiry
+by `cx-sweep` with the agent off, and automatic login of a real phone.
+
+PRODUCTION, 22 Nov 2026 (L009 `cx-l009-01`, router "Garki Market main"): migration
+applied, Worker deployed, agent enabled, Mac controller stopped. One real paid
+purchase was provisioned by the agent within about a minute, the phone had
+internet, and the plan was removed and marked `expired` by the agent about
+4 seconds after its end time. NOT yet tested on production: the backend being
+unreachable (offline expiry was tested on this router against staging only).
+
+Install note: `RouterOS` logs the full text of a changed script, token included.
+Install files must be imported without searching the log for `cx-config`; after
+an install, clear the log buffer
+(`/system logging action set memory memory-lines=1`, then back to `1000`) and
+`/file remove` the install file.
 
 RouterOS facts that shaped the scripts: scheduler runs do not share global
 variables (results are sent in the same run); empty strings vanish from

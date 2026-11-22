@@ -79,7 +79,7 @@ export function EnquiryForm() {
         <Field label="People there on a typical day" htmlFor="enq-users" optional>
           <select id="enq-users" name="users" className={selectClass} defaultValue=""><option value="">Choose one</option>{USER_RANGES.map((s) => <option key={s}>{s}</option>)}</select>
         </Field>
-        <Field label="Where the site is" htmlFor="enq-siteLocation" optional hint="Town and area, for example Garki, Abuja." className="sm:col-span-2">
+        <Field label="Where the site is" htmlFor="enq-siteLocation" optional hint="Town and area." className="sm:col-span-2">
           <input id="enq-siteLocation" name="siteLocation" className={inputClass} />
         </Field>
       </div>

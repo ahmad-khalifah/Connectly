@@ -37,6 +37,13 @@ Deploy with Wrangler directly: `npx wrangler deploy --env=""` for staging,
 when `cf:build` runs. Put them, and `ADMIN_EMAILS`, in `.env.production.local`
 (git-ignored) and nothing else.
 
+**Check the Supabase URL before every production build.** `.env.production.local`
+is also what a staging build reads, so it normally holds the STAGING values.
+Before `wrangler deploy --env production`, make it hold the production project's
+public values (`NEXT_PUBLIC_SUPABASE_URL` containing `plydltvxfozxflarrfrx`,
+production anon key, `NEXT_PUBLIC_APP_URL=https://getconnectly.net`), then put the
+staging file back.
+
 **Never build with secrets in a `.env` file.** OpenNext copies every value from
 `.env`, `.env.production`, `.env.local` and `.env.production.local` into the
 Worker's code (`.open-next/cloudflare/next-env.mjs`), so a service-role key in

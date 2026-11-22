@@ -81,7 +81,7 @@ export default function AdminShell({
     <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5" aria-label="Admin">
       {NAV.map((group) => (
         <div key={group.group}>
-          <p className="px-3 text-xs font-semibold text-subtle">{group.group}</p>
+          <p className="px-3 text-[13px] font-semibold text-muted">{group.group}</p>
           <ul className="mt-1.5 space-y-0.5">
             {group.items.map((item) => {
               const isActive = item.href === active;
@@ -93,11 +93,12 @@ export default function AdminShell({
                     aria-current={isActive ? 'page' : undefined}
                     onClick={() => setOpen(false)}
                     className={cn(
-                      'flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium transition-colors',
-                      isActive ? 'bg-brand-soft text-brand' : 'text-muted hover:bg-canvas hover:text-ink'
+                      'relative flex min-h-11 items-center gap-3 rounded-[var(--radius-control)] px-3 py-2.5 text-[15px] font-medium transition-colors',
+                      isActive ? 'bg-brand-soft font-semibold text-brand' : 'text-muted hover:bg-canvas hover:text-ink'
                     )}
                   >
-                    <Icon className={cn('h-4 w-4', isActive ? 'text-brand' : 'text-subtle')} />
+                    {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-1 rounded-full bg-brand" />}
+                    <Icon className={cn('h-[18px] w-[18px]', isActive ? 'text-brand' : 'text-subtle')} />
                     {item.name}
                   </Link>
                 </li>
@@ -119,7 +120,7 @@ export default function AdminShell({
           await browserAuth().signOut().catch(() => {});
           router.replace('/login');
         }}
-        className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted hover:text-bad"
+        className="mt-1 inline-flex min-h-11 items-center gap-1.5 text-[14px] font-semibold text-muted hover:text-bad"
       >
         <LogOut className="h-3.5 w-3.5" /> Sign out
       </button>
@@ -159,11 +160,12 @@ export default function AdminShell({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="ml-3 rounded-md p-2 text-ink hover:bg-canvas"
+            className="ml-3 flex h-11 items-center gap-2 rounded-md px-3 text-[15px] font-semibold text-ink hover:bg-canvas"
             aria-label="Open menu"
             aria-expanded={open}
           >
             <Menu className="h-5 w-5" />
+            Menu
           </button>
         </div>
 
