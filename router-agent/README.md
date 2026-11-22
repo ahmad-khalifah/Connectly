@@ -13,11 +13,21 @@ only), applies paid access, ends plans on its own clock, and reports back.
 ## Facts checked on the L009 (RouterOS 7.21.5, 21 Nov 2026)
 `:tonsec [:timestamp]` returns Unix nanoseconds; NTP is synchronized.
 
-## NOT yet tested
-Nothing in these scripts has run on a router yet. The backend side is tested
-(`supabase/tests/router_agent.test.mjs`, `tests/router-agent.test.ts`, and a
-full cycle on staging). Test order: staging token, dry run, then a real
-additive test, then production. See the project plan in the chat.
+## Test status
+Tested on the VIRTUAL router (CHR 7.25.1) against STAGING, 22 Nov 2026:
+heartbeat, provision (profile, user, comment with expiry), report back,
+expiry through the backend revoke, expiry through `cx-sweep` with the agent
+switched off (about a minute after the plan ends, the sweeper runs once a
+minute), and the backend catching up afterwards. Device auto-login was only
+tested as "device not seen" (no real client on the lab router).
+
+NOT yet tested on the physical L009 or on production. Test order there:
+connectivity only, a dry run (`cxDry=true`), a real additive test, then
+production.
+
+RouterOS facts that shaped the scripts: scheduler runs do not share global
+variables (results are sent in the same run); empty strings vanish from
+arrays (empty fields travel as `-`); there is no `:toupper`.
 
 ## Install (per router)
 1. Upload the three `.rsc` files to the router's Files.

@@ -32,17 +32,40 @@
 :set cxTick ($cxTick + 1)
 
 # ---- helpers ------------------------------------------------------------
+:local nl "\n"
+:local bar "|"
+:local empty "{}"
+
 :local split do={
   :local out [:toarray ""]
-  :local rest $s
-  :local p [:find $rest $d]
+  :local rest $str
+  :local p [:find $rest $sep]
   :while ([:typeof $p] = "num") do={
-    :set out ($out, [:pick $rest 0 $p])
-    :set rest [:pick $rest ($p + [:len $d]) [:len $rest]]
-    :set p [:find $rest $d]
+    :local piece [:pick $rest 0 $p]
+    # RouterOS drops "" when appending to an array, which shifts every
+    # later field, so empty fields travel as "-".
+    :if ([:len $piece] = 0) do={ :set piece "-" }
+    :set out ($out, $piece)
+    :set rest [:pick $rest ($p + [:len $sep]) [:len $rest]]
+    :set p [:find $rest $sep]
   }
+  :if ([:len $rest] = 0) do={ :set rest "-" }
   :set out ($out, $rest)
   :return $out
+}
+
+:local upmac do={
+  # RouterOS has no :toupper. MAC addresses only need a-f raised.
+  :local o ""
+  :local lo "abcdef"
+  :local hi "ABCDEF"
+  :for i from=0 to=([:len $s] - 1) do={
+    :local c [:pick $s $i ($i + 1)]
+    :local k [:find $lo $c]
+    :if ([:typeof $k] = "num") do={ :set c [:pick $hi $k ($k + 1)] }
+    :set o ($o . $c)
+  }
+  :return $o
 }
 
 :local report do={
@@ -55,6 +78,14 @@
 }
 
 :do {
+  # Scheduler runs do not share variables, so results are sent in the same
+  # run that produced them: up to 3 passes (fetch jobs, apply, report).
+  :set cxPending ""
+  :set cxPendingN 0
+  :local pass 0
+  :local more true
+  :while ($more = true && $pass < 3) do={
+  :set pass ($pass + 1)
   # ---- build the request ------------------------------------------------
   :local ver [/system resource get version]
   :local sp [:find $ver " "]
@@ -68,7 +99,7 @@
   # Active sessions for the dashboard, once a minute. Left out when there are
   # too many to send whole (the backend would think the rest had ended).
   :local sessions ""
-  :if (($cxTick % 4) = 1) do={
+  :if ($pass = 1 && ($now % 60) < 15) do={
     :local act [/ip hotspot active find]
     :if ([:len $act] <= 190) do={
       :local items ""
@@ -88,6 +119,8 @@
 
   :local body ("{\"results\":[" . $cxPending . "],\"status\":{\"version\":\"" . $ver . "\",\"agent_version\":\"1\",\"uptime_seconds\":" . $upSec . ",\"cpu\":" . $cpu . ",\"memory\":" . $mem . ",\"router_epoch\":" . $now . $sessions . "}}")
 
+  :if ($cxPendingN > 0) do={ :log info ("cx-agent: sending " . $cxPendingN . " result(s): " . $cxPending) }
+
   # ---- ask the backend ----------------------------------------------------
   :local resp ""
   :local got false
@@ -106,10 +139,11 @@
     :set cxPending ""
     :set cxPendingN 0
 
-    :foreach line in=[$split s=$resp d="\n"] do={
+    :local lines [$split str=$resp sep=$nl]
+    :foreach line in=$lines do={
       :if ([:len $line] > 2) do={
         :local t [:pick $line 0 1]
-        :local f [$split s=$line d="|"]
+        :local f [$split str=$line sep=$bar]
 
         # S|server_epoch|poll_after_seconds
         :if ($t = "S") do={
@@ -135,13 +169,15 @@
           :local lb ($f->10)
           :local base ($f->11)
           :local mac ($f->12)
+          :if ($lb = "-") do={ :set lb "" }
+          :if ($mac = "-") do={ :set mac "" }
           :local cm ($base . ":" . $exp)
           :local step "start"
           :local good false
           :local auto "none"
           :if ($cxDry = true) do={
             :log info ("cx-agent DRY RUN: would add " . $usr . " " . $pname . " " . $rem . "s")
-            [$report id=$jid ok=false err="dry run" retry=false resp="{}"]
+            [$report id=$jid ok=false err="dry run" retry=false resp=$empty]
           } else={
             :do {
               :set step "profile"
@@ -175,7 +211,7 @@
               :do {
                 :set step "login"
                 :if ([:len $mac] > 0) do={
-                  :local mu [:toupper $mac]
+                  :local mu [$upmac s=$mac]
                   :if ([:len [/ip hotspot active find where mac-address=$mu]] > 0) do={
                     :set auto "already_online"
                   } else={
@@ -190,10 +226,11 @@
                   }
                 } else={ :set auto "no_device" }
               } on-error={ :set auto "failed" }
-              [$report id=$jid ok=true err="" retry=true resp=("{\"username\":\"" . $usr . "\",\"auto_login\":{\"status\":\"" . $auto . "\"}}")]
+              :local rs ("{\"username\":\"" . $usr . "\",\"auto_login\":{\"status\":\"" . $auto . "\"}}")
+              [$report id=$jid ok=true err="" retry=true resp=$rs]
               :log info ("cx-agent: provisioned " . $usr . " login=" . $auto)
             } else={
-              [$report id=$jid ok=false err=("failed at " . $step) retry=true resp="{}"]
+              [$report id=$jid ok=false err=("failed at " . $step) retry=true resp=$empty]
             }
           }
         }
@@ -203,12 +240,13 @@
           :local jid ($f->1)
           :local base ("connectly:" . ($f->2))
           :local usr ($f->3)
+          :if ($usr = "-") do={ :set usr "" }
           :local good false
           :local removed false
           :local nsess 0
           :if ($cxDry = true) do={
             :log info ("cx-agent DRY RUN: would remove " . $usr)
-            [$report id=$jid ok=false err="dry run" retry=false resp="{}"]
+            [$report id=$jid ok=false err="dry run" retry=false resp=$empty]
           } else={
             :do {
               :if ([:len $usr] > 0) do={
@@ -229,10 +267,11 @@
               :set good true
             } on-error={ :log warning "cx-agent: revoke failed" }
             :if ($good = true) do={
-              [$report id=$jid ok=true err="" retry=true resp=("{\"removed_user\":" . $removed . ",\"removed_sessions\":" . $nsess . "}")]
+              :local rs ("{\"removed_user\":" . $removed . ",\"removed_sessions\":" . $nsess . "}")
+              [$report id=$jid ok=true err="" retry=true resp=$rs]
               :log info ("cx-agent: ended " . $usr)
             } else={
-              [$report id=$jid ok=false err="revoke failed" retry=true resp="{}"]
+              [$report id=$jid ok=false err="revoke failed" retry=true resp=$empty]
             }
           }
         }
@@ -247,13 +286,15 @@
             :set good true
           } on-error={}
           :if ($good = true) do={
-            [$report id=$jid ok=true err="" retry=true resp="{}"]
+            [$report id=$jid ok=true err="" retry=true resp=$empty]
           } else={
-            [$report id=$jid ok=false err="disconnect failed" retry=true resp="{}"]
+            [$report id=$jid ok=false err="disconnect failed" retry=true resp=$empty]
           }
         }
       }
     }
+  }
+  :if ($cxPendingN = 0 || $got = false) do={ :set more false }
   }
 } on-error={
   :log error "cx-agent: unexpected error"
