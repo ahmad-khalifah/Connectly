@@ -65,10 +65,7 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Dashboard"
-        description={`Sales and WiFi at a glance, in Lagos time${locationName ? `, for ${locationName}` : ', for all locations'}. Hover a figure to see how it is worked out.`}
-      />
+      <PageHeader title="Dashboard" />
       <DashboardFilters period={period} locationId={locationId} locations={locations} />
 
       {alerts.loaded.state === 'ready' && (
