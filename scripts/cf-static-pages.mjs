@@ -13,7 +13,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-const PUBLIC = ['/', '/portal', '/connect', '/success', '/wifi', '/login'];
+const PUBLIC = ['/', '/about', '/solutions', '/industries', '/partnerships', '/contact', '/portal', '/connect', '/success', '/login'];
 const manifest = JSON.parse(readFileSync('.next/prerender-manifest.json', 'utf8'));
 const appPaths = JSON.parse(readFileSync('.next/server/app-paths-manifest.json', 'utf8'));
 

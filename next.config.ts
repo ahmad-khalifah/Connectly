@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // lib/http/admin-api.ts, which answers the same redirects on Cloudflare).
   async redirects() {
     return [
+      // The old marketing page moved to Solutions.
+      { source: '/wifi', destination: '/solutions', permanent: true },
       { source: '/admin/customers/:id([0-9a-fA-F-]{36})', destination: '/admin/customer?id=:id', permanent: true },
       { source: '/admin/plans/:id([0-9a-fA-F-]{36})', destination: '/admin/plan?id=:id', permanent: true },
       { source: '/admin/locations/:id([0-9a-fA-F-]{36})', destination: '/admin/location?id=:id', permanent: true },

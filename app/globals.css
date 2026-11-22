@@ -18,6 +18,14 @@
   --color-indigo-strong: #1a2547;
   --color-indigo-soft: #e9ecf4;
 
+  /* Corporate site: deep burgundy for dark sections, golden sand as the accent. */
+  --color-burgundy-950: #240810;
+  --color-burgundy-900: #3a0d17;
+  --color-burgundy-800: #4d1220;
+  --color-sand: #e6cc92;
+  --color-sand-strong: #d9a441;
+  --color-sand-soft: #f7efdc;
+
   --color-ink: #1f2430;
   --color-muted: #5a6070;
   --color-subtle: #868c9a;
@@ -73,3 +81,13 @@
 .animate-slow-pan {
   animation: pan 30s linear infinite alternate;
 }
+
+/* Corporate site motion: one load-in sequence and a slow ring drift. */
+@keyframes cx-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cx-rise { animation: cx-rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes cx-spin { to { transform: rotate(360deg); } }
+.cx-spin-slow { transform-origin: 400px 400px; animation: cx-spin 140s linear infinite; }
+.cx-spin-slower { transform-origin: 400px 400px; animation: cx-spin 220s linear infinite reverse; }

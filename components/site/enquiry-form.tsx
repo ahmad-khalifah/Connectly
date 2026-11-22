@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { SITE_TYPES, USER_RANGES } from '@/lib/enquiries';
 
-const CONTACT_EMAIL = 'connectly.hq@outlook.com';
+import { COMPANY_EMAIL as CONTACT_EMAIL } from '@/lib/company';
+
+const TOPICS = ['Solutions for my organisation', 'Partnership', 'Something else'] as const;
 
 export function EnquiryForm() {
   const [startedAt] = useState(() => Date.now());
@@ -19,7 +21,17 @@ export function EnquiryForm() {
     setBusy(true);
     setError(null);
     const f = new FormData(e.currentTarget);
-    const body = { ...Object.fromEntries(f.entries()), startedAt };
+    const fields = Object.fromEntries(f.entries());
+    // The enquiry API has one message field, so the topic leads it.
+    const { topic, message, ...rest } = fields as Record<string, string>;
+    if ((message ?? '').trim().length < 10) {
+      // The topic tag would otherwise let a very short message through.
+      setError({ text: 'Tell us a little more (at least a sentence).', field: 'message' });
+      document.getElementById('enq-message')?.focus();
+      setBusy(false);
+      return;
+    }
+    const body = { ...rest, message: `[${topic || TOPICS[0]}] ${message ?? ''}`, startedAt };
     try {
       const res = await fetch('/api/enquiries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json().catch(() => ({}));
@@ -57,11 +69,15 @@ export function EnquiryForm() {
         <input id="enq-website" name="website" tabIndex={-1} autoComplete="off" />
       </div>
 
+      <Field label="What is your enquiry about?" htmlFor="enq-topic">
+        <select id="enq-topic" name="topic" className={selectClass} defaultValue={TOPICS[0]}>{TOPICS.map((t) => <option key={t}>{t}</option>)}</select>
+      </Field>
+
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Your name" htmlFor="enq-name" error={err('name')}>
           <input id="enq-name" name="name" autoComplete="name" required className={inputClass} />
         </Field>
-        <Field label="Organisation or site" htmlFor="enq-organisation" error={err('organisation')}>
+        <Field label="Organisation" htmlFor="enq-organisation" error={err('organisation')}>
           <input id="enq-organisation" name="organisation" autoComplete="organization" required className={inputClass} />
         </Field>
         <Field label="Email" htmlFor="enq-email" error={err('email')}>
@@ -73,19 +89,19 @@ export function EnquiryForm() {
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Type of site" htmlFor="enq-siteType" optional>
+        <Field label="Type of organisation or site" htmlFor="enq-siteType" optional>
           <select id="enq-siteType" name="siteType" className={selectClass} defaultValue=""><option value="">Choose one</option>{SITE_TYPES.map((s) => <option key={s}>{s}</option>)}</select>
         </Field>
-        <Field label="People there on a typical day" htmlFor="enq-users" optional>
+        <Field label="People who would use the network on a typical day" htmlFor="enq-users" optional>
           <select id="enq-users" name="users" className={selectClass} defaultValue=""><option value="">Choose one</option>{USER_RANGES.map((s) => <option key={s}>{s}</option>)}</select>
         </Field>
-        <Field label="Where the site is" htmlFor="enq-siteLocation" optional hint="Town and area." className="sm:col-span-2">
+        <Field label="Town or area" htmlFor="enq-siteLocation" optional className="sm:col-span-2">
           <input id="enq-siteLocation" name="siteLocation" className={inputClass} />
         </Field>
       </div>
 
-      <Field label="Tell us about the site" htmlFor="enq-message" error={err('message')}
-        hint="What the WiFi is for, and anything we should know about power or internet there.">
+      <Field label="How can we help?" htmlFor="enq-message" error={err('message')}
+        hint="Tell us about your organisation and what you are looking for.">
         <textarea id="enq-message" name="message" required className={textareaClass} />
       </Field>
 
