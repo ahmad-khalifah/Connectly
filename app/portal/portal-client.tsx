@@ -6,7 +6,7 @@ import { AlreadyPaid } from './already-paid';
 import { Button } from '@/components/ui/button';
 import { Field, inputClass } from '@/components/ui/field';
 import { Notice } from '@/components/ui/notice';
-import { naira, planData, planDevices, planDuration, planSpeed } from '@/lib/plan-format';
+import { naira, planData, planDevices, planDuration, planSpeed, recommendedPlanId } from '@/lib/plan-format';
 import { cn } from '@/lib/utils';
 import { normaliseNigerianMobile } from '@/lib/phone';
 import { WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/lib/brand';
@@ -47,6 +47,7 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
   const [isProcessing, setIsProcessing] = useState(false);
 
   const selected = plans.find((p) => p.id === selectedPlanId);
+  const recommendedId = recommendedPlanId(plans);
 
   const goTo = (next: 'plan' | 'phone') => {
     setError(null);
@@ -183,7 +184,14 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
                   />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-3">
-                      <span className="text-base font-semibold text-ink">{plan.name}</span>
+                      <span className="text-base font-semibold text-ink">
+                        {plan.name}
+                        {plan.id === recommendedId && (
+                          <span className="ml-2 inline-block rounded-full bg-brand px-2 py-0.5 align-middle text-[11px] font-semibold leading-4 text-white">
+                            Recommended
+                          </span>
+                        )}
+                      </span>
                       <span className="tnum text-lg font-bold text-ink">{naira(plan.price_kobo / 100)}</span>
                     </span>
                     <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-muted">

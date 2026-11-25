@@ -27,6 +27,22 @@ export function planSpeed(mbps: number | null | undefined): string | null {
   return mbps && mbps > 0 ? `Up to ${mbps} Mbps` : null;
 }
 
+const THIRTY_DAYS_SECONDS = 30 * 86400;
+
+/**
+ * The plan the portal marks "Recommended": the 30-day plan for one device
+ * (the cheapest, if there are several). Decided here from the plan's own
+ * duration and device limit, so it follows the plan if its name or price changes.
+ */
+export function recommendedPlanId(
+  plans: { id: string; price_kobo: number; duration_seconds: number | null; device_limit: number | null }[],
+): string | null {
+  const matches = plans
+    .filter((p) => p.duration_seconds === THIRTY_DAYS_SECONDS && Math.max(1, p.device_limit ?? 1) === 1)
+    .sort((a, b) => a.price_kobo - b.price_kobo);
+  return matches[0]?.id ?? null;
+}
+
 export function naira(amount: number): string {
   return `₦${amount.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 }
