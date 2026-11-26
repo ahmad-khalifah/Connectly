@@ -6,10 +6,10 @@ import { AlreadyPaid } from './already-paid';
 import { Button } from '@/components/ui/button';
 import { Field, inputClass } from '@/components/ui/field';
 import { Notice } from '@/components/ui/notice';
-import { naira, planData, planDevices, planDuration, planSpeed, recommendedPlanId } from '@/lib/plan-format';
+import { naira, planData, planDevices, planDuration, recommendedPlanId } from '@/lib/plan-format';
 import { cn } from '@/lib/utils';
 import { normaliseNigerianMobile } from '@/lib/phone';
-import { WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/lib/brand';
+import { WhatsAppNumber } from '@/components/portal/whatsapp-number';
 
 export interface Plan {
   id: string;
@@ -149,26 +149,32 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       <AlreadyPaid loginUrl={loginUrl} routerId={routerId} mac={mac} />
 
       <form
         onSubmit={(e) => { e.preventDefault(); if (selected) goTo('phone'); }}
         noValidate
-        className="space-y-7"
+        className="space-y-4"
       >
+        {/* Compact rows so every plan fits on one phone screen inside the
+            sign-in window, with Continue still in view. */}
         <fieldset>
-          <legend className="text-xl font-bold tracking-[-0.01em] text-ink">Choose a plan</legend>
-          <p className="mt-1 text-sm text-muted">Pay once. No account, no subscription.</p>
-          <div className="mt-4 overflow-hidden rounded-[var(--radius-panel)] border border-line bg-surface">
+          <legend className="flex w-full items-baseline justify-between gap-3">
+            <span className="text-lg font-bold tracking-[-0.01em] text-ink">Choose a plan</span>
+            <span className="text-[13px] text-muted">Pay once, no account</span>
+          </legend>
+          <div className="mt-3 overflow-hidden rounded-[var(--radius-panel)] border border-line bg-surface">
             {plans.map((plan, i) => {
               const checked = plan.id === selectedPlanId;
-              const details = [planDuration(plan.duration_seconds), planData(plan.data_limit_mb), planDevices(plan.device_limit), planSpeed(plan.speed_down_mbps)].filter(Boolean);
+              const limitedData = plan.data_limit_mb && plan.data_limit_mb > 0 ? planData(plan.data_limit_mb) : null;
+              const speed = plan.speed_down_mbps && plan.speed_down_mbps > 0 ? `${plan.speed_down_mbps} Mbps` : null;
+              const details = [planDuration(plan.duration_seconds), planDevices(plan.device_limit), speed, limitedData].filter(Boolean);
               return (
                 <label
                   key={plan.id}
                   className={cn(
-                    'relative flex cursor-pointer gap-3.5 px-4 py-4 transition-colors',
+                    'relative flex min-h-12 cursor-pointer items-center gap-3 px-4 py-2 transition-colors',
                     i > 0 && 'border-t border-line',
                     checked ? 'bg-brand-soft' : 'hover:bg-canvas'
                   )}
@@ -180,47 +186,41 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
                     value={plan.id}
                     checked={checked}
                     onChange={() => setSelectedPlanId(plan.id)}
-                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-brand)]"
+                    className="h-4 w-4 shrink-0 accent-[var(--color-brand)]"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline justify-between gap-3">
-                      <span className="text-base font-semibold text-ink">
-                        {plan.name}
-                        {plan.id === recommendedId && (
-                          <span className="ml-2 inline-block rounded-full bg-brand px-2 py-0.5 align-middle text-[11px] font-semibold leading-4 text-white">
-                            Recommended
-                          </span>
-                        )}
+                    <span className="block text-[15px] font-semibold leading-5 text-ink">{plan.name}</span>
+                    <span className="mt-0.5 block truncate text-[12px] leading-4 text-muted">
+                      {details.join(' · ')}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    {plan.id === recommendedId && (
+                      <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-semibold leading-3 text-white">
+                        Recommended
                       </span>
-                      <span className="tnum text-lg font-bold text-ink">{naira(plan.price_kobo / 100)}</span>
-                    </span>
-                    <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-muted">
-                      {details.map((d) => <span key={d as string}>{d}</span>)}
-                    </span>
+                    )}
+                    <span className="tnum text-base font-bold leading-5 text-ink">{naira(plan.price_kobo / 100)}</span>
                   </span>
                 </label>
               );
             })}
           </div>
+          {plans.every((p) => (!p.data_limit_mb || p.data_limit_mb <= 0) && !/unlimited/i.test(p.name)) && (
+            <p className="mt-2 text-[12px] text-muted">All plans have unlimited data.</p>
+          )}
         </fieldset>
 
-        <div className="sticky bottom-0 -mx-5 border-t border-line bg-surface/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
-          {selected && (
-            <p className="mb-3 text-sm text-muted">
-              <span className="font-semibold text-ink">{selected.name}</span>
-              {', '}
-              {summary}
-            </p>
-          )}
+        <div className="sticky bottom-0 -mx-5 border-t border-line bg-surface/95 px-5 py-3 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
           <Button type="submit" size="lg" full disabled={!selected}>
-            Continue
+            {selected ? `Continue with ${naira(selected.price_kobo / 100)}` : 'Continue'}
           </Button>
-          <p className="mt-2 text-center text-xs text-subtle">
-            Need help? WhatsApp{' '}
-            <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand underline underline-offset-2">{WHATSAPP_DISPLAY}</a>
-          </p>
         </div>
       </form>
+
+      <p className="flex flex-wrap items-center justify-center gap-x-2 text-center text-xs text-subtle">
+        Need help? WhatsApp <WhatsAppNumber />
+      </p>
 
       <section aria-labelledby="how" className="text-sm">
         <h2 id="how" className="font-semibold text-ink">How it works</h2>

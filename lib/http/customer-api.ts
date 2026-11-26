@@ -71,7 +71,7 @@ export type PortalView =
   | { kind: 'unknown' }
   | { kind: 'not_set_up' }
   | { kind: 'join'; location: { name: string } }
-  | { kind: 'running'; place: string | null; expiresAt: string; loginUrl: string | null }
+  | { kind: 'running'; place: string | null; routerId: string; expiresAt: string; loginUrl: string | null }
   | { kind: 'plans'; location: PortalLocation; routerId: string; plans: PortalPlan[]; loginUrl: string | null };
 
 const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
@@ -120,7 +120,7 @@ export async function handlePortal(request: Request): Promise<Response> {
         .limit(1)
         .maybeSingle();
       if (activeAuth) {
-        return json({ kind: 'running', place: location?.name ?? null, expiresAt: String(activeAuth.expires_at), loginUrl: await loginUrlP } satisfies PortalView);
+        return json({ kind: 'running', place: location?.name ?? null, routerId: router.id as string, expiresAt: String(activeAuth.expires_at), loginUrl: await loginUrlP } satisfies PortalView);
       }
     }
   }

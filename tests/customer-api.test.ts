@@ -62,7 +62,7 @@ describe('GET /api/portal', () => {
   it('says the plan is still running when this device has an active grant', async () => {
     fake = createFakeDb(world({ device: { id: 'dev1' }, grant: { expires_at: '2026-11-21T20:00:00Z' } }));
     expect(await portal(`router=cx-garki-01&mac=${MAC}`)).toEqual({
-      kind: 'running', place: 'Garki', expiresAt: '2026-11-21T20:00:00Z', loginUrl: 'http://wifi.garki.example/login',
+      kind: 'running', place: 'Garki', routerId: ROUTER, expiresAt: '2026-11-21T20:00:00Z', loginUrl: 'http://wifi.garki.example/login',
     });
     expect(fake.ops.some((o) => o.table === 'plans')).toBe(false);
   });

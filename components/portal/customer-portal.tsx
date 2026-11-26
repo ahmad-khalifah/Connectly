@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import PortalClient from '@/app/portal/portal-client';
 import CodeLogin from '@/app/portal/code-login';
+import PhoneLookup from '@/app/portal/phone-lookup';
 import { PortalShell } from '@/components/portal/portal-shell';
 import { LensMark } from '@/components/ui/lens-mark';
 import { Notice } from '@/components/ui/notice';
@@ -122,11 +123,17 @@ export function CustomerPortal({ page }: { page: 'portal' | 'connect' }) {
               </p>
             </div>
           </div>
-          {view.loginUrl && (
-            <section className="mt-6 rounded-[var(--radius-panel)] border border-line bg-surface p-5">
-              <CodeLogin loginUrl={view.loginUrl} heading="Not browsing? Enter your WiFi code to reconnect" />
-            </section>
-          )}
+          <section className="mt-6 rounded-[var(--radius-panel)] border border-line bg-surface p-5">
+            <h2 className="text-base font-semibold text-ink">Not browsing? Reconnect</h2>
+            <div className="mt-4">
+              <PhoneLookup routerId={view.routerId} mac={mac} />
+            </div>
+            {view.loginUrl && (
+              <div className="mt-5 border-t border-line pt-4">
+                <CodeLogin loginUrl={view.loginUrl} heading="Or enter your WiFi code" />
+              </div>
+            )}
+          </section>
         </PortalShell>
       );
 

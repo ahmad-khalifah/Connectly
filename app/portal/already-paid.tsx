@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { KeyRound, ChevronDown, MessageCircle } from 'lucide-react';
 import CodeLogin from './code-login';
 import PhoneLookup from './phone-lookup';
-import { WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/lib/brand';
+import { WhatsAppNumber } from '@/components/portal/whatsapp-number';
 import { cn } from '@/lib/utils';
 
 /**
@@ -23,12 +23,12 @@ export function AlreadyPaid({ loginUrl, routerId, mac }: { loginUrl: string | nu
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls="already-paid-panel"
-        className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left"
+        className="flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand"><KeyRound className="h-5 w-5" aria-hidden /></span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand"><KeyRound className="h-4 w-4" aria-hidden /></span>
         <span className="min-w-0 flex-1">
-          <span className="block text-base font-semibold text-ink">Already paid?</span>
-          <span className="block text-[13px] text-muted">Tap here to get back online</span>
+          <span className="block text-[15px] font-semibold leading-5 text-ink">Already paid?</span>
+          <span className="block text-[12px] leading-4 text-muted">Use your phone number or WiFi code</span>
         </span>
         <ChevronDown className={cn('h-5 w-5 shrink-0 text-muted transition-transform', open && 'rotate-180')} aria-hidden />
       </button>
@@ -45,15 +45,10 @@ export function AlreadyPaid({ loginUrl, routerId, mac }: { loginUrl: string | nu
               Turn your WiFi off and on, then wait for this page to open again. Your code is in the text we sent after you paid.
             </p>
           )}
-          <a
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand underline underline-offset-4"
-          >
-            <MessageCircle className="h-4 w-4" aria-hidden />
-            Lost your code? WhatsApp {WHATSAPP_DISPLAY}
-          </a>
+          <p className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted">
+            <MessageCircle className="h-4 w-4 text-brand" aria-hidden />
+            Lost your code? WhatsApp <WhatsAppNumber />
+          </p>
         </div>
       )}
     </section>

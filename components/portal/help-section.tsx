@@ -1,4 +1,4 @@
-import { WHATSAPP_DISPLAY, WHATSAPP_URL } from '@/lib/brand';
+import { WhatsAppNumber } from './whatsapp-number';
 
 const QUESTIONS: { q: string; a: React.ReactNode }[] = [
   {
@@ -37,11 +37,8 @@ export function HelpSection() {
           ))}
         </div>
         <p className="mt-5 text-sm leading-relaxed text-muted">
-          Still stuck? Message our help line on WhatsApp:{' '}
-          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand underline underline-offset-2">
-            {WHATSAPP_DISPLAY}
-          </a>
-          . Have your payment reference ready.
+          Still stuck? Message our help line on WhatsApp: <WhatsAppNumber />
+          <span className="mt-1 block">Have your payment reference ready.</span>
         </p>
       </div>
     </section>
