@@ -1,5 +1,6 @@
 import { Wordmark } from '@/components/ui/lens-mark';
 import { HelpSection } from './help-section';
+import { COMPANY_ADDRESS_LINE, COMPANY_EMAIL, COMPANY_NAME } from '@/lib/company';
 
 /**
  * Frame for every customer-facing WiFi screen: brand, the place, the content,
@@ -36,6 +37,14 @@ export function PortalShell({
       </header>
       <main className="mx-auto w-full max-w-md flex-1 px-5 pb-10 pt-6">{children}</main>
       {showHelp && <HelpSection />}
+      {/* Business details on every portal screen (required for the Termii sender ID). */}
+      <footer className="border-t border-line bg-surface">
+        <address className="mx-auto max-w-md px-5 py-5 text-xs not-italic leading-relaxed text-subtle">
+          <span className="block font-semibold text-muted">{COMPANY_NAME}</span>
+          <span className="block">{COMPANY_ADDRESS_LINE}</span>
+          <span className="block">{COMPANY_EMAIL}</span>
+        </address>
+      </footer>
     </div>
   );
 }

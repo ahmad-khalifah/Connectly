@@ -82,9 +82,8 @@ export async function resendVoucher(grantId: string, now = Date.now()): Promise<
   }
   const p = (Array.isArray(g.purchases) ? g.purchases[0] : g.purchases) as { id: string; phone_number: string | null; plans?: unknown } | null;
   if (!p?.phone_number) return { ok: false, status: 409, message: 'No phone number is recorded for this payment.' };
-  const plan = (Array.isArray(p.plans) ? p.plans[0] : p.plans) as { name?: string } | null;
-  const until = new Date(g.expires_at).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' });
-  const body = `Connectly: your WiFi code is ${g.voucher_code} (use it as username and password) for ${plan?.name ?? 'your plan'}, valid until ${until}.`;
+  // Same wording as the payment SMS approved by Termii.
+  const body = `Hello, your Wi-Fi voucher PIN is ${g.voucher_code}. Connect to the Connectly network and enter this PIN to browse. Powered by Connectly`;
 
   const slot = Math.floor(now / RESEND_GAP_MS);
   const { data: claimed, error } = await db

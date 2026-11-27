@@ -135,14 +135,15 @@ export function confirmationText(p: {
   expiresAt: string | null;
   reference: string;
 }): string {
-  const until = p.expiresAt
-    ? new Date(p.expiresAt).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' })
-    : 'n/a';
+  // Wording approved by Termii for the sender ID (Nov 2026); keep it as is.
+  // We do not collect names, so it opens with "Hello," instead of a name.
+  const naira = Math.round(Number(p.amountKobo ?? 0) / 100);
+  if (!p.voucher) {
+    return `Hello, your payment of NGN ${naira} was successful. Ref ${p.reference}. Powered by Connectly`;
+  }
   return (
-    `Connectly: NGN ${(Number(p.amountKobo ?? 0) / 100).toLocaleString('en-NG')} received for ` +
-    `${p.planName ?? 'your plan'}${p.locationName ? ` at ${p.locationName}` : ''}. ` +
-    (p.voucher ? `Your WiFi code: ${p.voucher} (use it as username and password). ` : '') +
-    `Valid until ${until}. Ref ${p.reference}`
+    `Hello, your payment of NGN ${naira} was successful. Your Wi-Fi voucher PIN is ${p.voucher}. ` +
+    'Connect to the Connectly network and enter this PIN to browse. Powered by Connectly'
   );
 }
 

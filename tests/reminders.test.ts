@@ -44,7 +44,7 @@ describe('due texts (scheduled)', () => {
     expect(await sendDueTexts({ now: NOW })).toEqual({ claimed: 3, sent: 3, failed: 0 });
     expect(fake.rpcCalls[0]).toEqual({ fn: 'claim_due_sms', args: { p_now: NOW.toISOString(), p_limit: 5 } });
     const texts = sendTermiiSMS.mock.calls.map((c) => c[1] as string);
-    expect(texts[0]).toMatch(/^Connectly: NGN 250 received for Day pass at Garki\. Your WiFi code: ABCD2345 .* Ref CONN_abc$/);
+    expect(texts[0]).toBe('Hello, your payment of NGN 250 was successful. Your Wi-Fi voucher PIN is ABCD2345. Connect to the Connectly network and enter this PIN to browse. Powered by Connectly');
     expect(texts[1]).toMatch(/your Day pass at Garki ends at 1:40\s?pm/i);
     expect(texts[2]).toMatch(/your Hour has ended/);
     expect(fake.rpcCalls).toHaveLength(2);

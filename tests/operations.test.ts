@@ -60,7 +60,7 @@ describe('resend WiFi code', () => {
     fake = createFakeDb(world(grant()));
     const res = await post();
     expect(res.status).toBe(200);
-    expect(sendTermiiSMS).toHaveBeenCalledWith('2348031234567', expect.stringMatching(/your WiFi code is K7M2Q9XP/));
+    expect(sendTermiiSMS).toHaveBeenCalledWith('2348031234567', expect.stringMatching(/your Wi-Fi voucher PIN is K7M2Q9XP\./));
     expect(fake.ops.find((o) => o.table === 'activity_logs')?.values).toMatchObject({ event_type: 'access.voucher_resent', entity_id: GRANT });
   });
   it('refuses a second send within two minutes', async () => {

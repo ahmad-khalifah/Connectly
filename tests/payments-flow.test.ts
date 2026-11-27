@@ -49,7 +49,7 @@ describe('reconcilePurchase', () => {
     verifyCharge.mockResolvedValue({ reference: REF, status: 'success', amountPaidKobo: 25000, feeKobo: 375, currency: 'NGN', providerReference: 'KPY-1' });
     const { reconcilePurchase } = await import('@/lib/payments/ledger');
     await reconcilePurchase(REF);
-    expect(sendTermiiSMS.mock.calls[0][1]).toMatch(/Your WiFi code: K7M2Q9XP/);
+    expect(sendTermiiSMS.mock.calls[0][1]).toMatch(/Your Wi-Fi voucher PIN is K7M2Q9XP\./);
     expect((sendTermiiSMS.mock.calls[0][1] as string).length).toBeLessThanOrEqual(306); // two SMS parts at most
   });
 
@@ -438,7 +438,7 @@ describe('confirmation SMS sent at the payment page\'s request', () => {
     const res = await notify({ reference: REF3 });
     expect(await res.json()).toEqual({ sms: 'sent' });
     expect(sendTermiiSMS).toHaveBeenCalledTimes(1);
-    expect(sendTermiiSMS.mock.calls[0][1]).toMatch(/Your WiFi code: CG8FSMMQ/);
+    expect(sendTermiiSMS.mock.calls[0][1]).toMatch(/Your Wi-Fi voucher PIN is CG8FSMMQ\./);
     expect(fake.ops.filter((o) => o.table === 'notifications').map((o) => o.action)).toEqual(['insert', 'update']);
     expect(fake.ops.find((o) => o.table === 'notifications' && o.action === 'update')?.values).toMatchObject({ status: 'sent', attempts: 1 });
   });
