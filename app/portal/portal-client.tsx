@@ -1,5 +1,7 @@
 'use client';
 
+import { Sparkles } from 'lucide-react';
+
 import { useState } from 'react';
 import type { CheckoutResult } from '@/lib/payments/checkout';
 import { AlreadyPaid } from './already-paid';
@@ -167,6 +169,7 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
           <div className="mt-3 overflow-hidden rounded-[var(--radius-panel)] border border-line bg-surface">
             {plans.map((plan, i) => {
               const checked = plan.id === selectedPlanId;
+              const recommended = plan.id === recommendedId;
               const limitedData = plan.data_limit_mb && plan.data_limit_mb > 0 ? planData(plan.data_limit_mb) : null;
               const speed = plan.speed_down_mbps && plan.speed_down_mbps > 0 ? `${plan.speed_down_mbps} Mbps` : null;
               const details = [planDuration(plan.duration_seconds), planDevices(plan.device_limit), speed, limitedData].filter(Boolean);
@@ -176,10 +179,17 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
                   className={cn(
                     'relative flex min-h-12 cursor-pointer items-center gap-3 px-4 py-2 transition-colors',
                     i > 0 && 'border-t border-line',
-                    checked ? 'bg-brand-soft' : 'hover:bg-canvas'
+                    recommended && 'pt-5',
+                    checked ? 'bg-brand-soft' : recommended ? 'bg-ochre-soft/70 hover:bg-ochre-soft' : 'hover:bg-canvas'
                   )}
                 >
                   {checked && <span aria-hidden className="absolute inset-y-0 left-0 w-1 bg-brand" />}
+                  {recommended && (
+                    <span className="absolute right-0 top-0 inline-flex items-center gap-1 rounded-bl-[10px] bg-linear-to-r from-[#f4d891] to-ochre py-[3px] pl-2 pr-2.5 text-[10.5px] font-semibold leading-3 text-brand-strong">
+                      <Sparkles className="h-3 w-3" aria-hidden strokeWidth={2.4} />
+                      Recommended
+                    </span>
+                  )}
                   <input
                     type="radio"
                     name="plan"
@@ -194,14 +204,7 @@ export default function PortalClient({ mac, ip, routerId, location, plans, login
                       {details.join(' · ')}
                     </span>
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    {plan.id === recommendedId && (
-                      <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-semibold leading-3 text-white">
-                        Recommended
-                      </span>
-                    )}
-                    <span className="tnum text-base font-bold leading-5 text-ink">{naira(plan.price_kobo / 100)}</span>
-                  </span>
+                  <span className="tnum shrink-0 text-base font-bold leading-5 text-ink">{naira(plan.price_kobo / 100)}</span>
                 </label>
               );
             })}
