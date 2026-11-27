@@ -22,6 +22,13 @@ import type { PortalView } from '@/lib/http/customer-api';
 const lagos = (iso: string) =>
   new Date(iso).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
+/** Each try waits this long for the plans before giving up on that connection. */
+const LOAD_TIMEOUT_MS = 8000;
+/** Tries before showing "Try again" (about 30 seconds in the worst case). */
+const LOAD_TRIES = 3;
+const RETRY_DELAY_MS = 1000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'ready'; view: PortalView };
 
 export function CustomerPortal({ page }: { page: 'portal' | 'connect' }) {
@@ -42,14 +49,37 @@ export function CustomerPortal({ page }: { page: 'portal' | 'connect' }) {
     if (mac) params.set('mac', mac);
     if (loc) params.set('loc', loc);
     let cancelled = false;
-    fetch(`/api/portal?${params.toString()}`, { cache: 'no-store' })
-      .then((res) => {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.json() as Promise<PortalView>;
-      })
-      .then((view) => { if (!cancelled) setLoad({ state: 'ready', view }); })
-      .catch(() => { if (!cancelled) setLoad({ state: 'error' }); });
-    return () => { cancelled = true; };
+    let controller: AbortController | null = null;
+    // Inside the WiFi sign-in window a request can hang with no answer (for
+    // example when the phone picks a server address the hotspot does not allow
+    // yet). Give each try a time limit and retry on a fresh connection before
+    // showing "Try again", so nobody is left on a spinner.
+    (async () => {
+      for (let tryNo = 0; tryNo < LOAD_TRIES; tryNo++) {
+        if (tryNo > 0) await sleep(RETRY_DELAY_MS * tryNo);
+        if (cancelled) return;
+        controller = new AbortController();
+        const timer = setTimeout(() => controller?.abort(), LOAD_TIMEOUT_MS);
+        try {
+          const res = await fetch(`/api/portal?${params.toString()}`, { cache: 'no-store', signal: controller.signal });
+          if (!res.ok) {
+            // A clear answer from the server (unknown router, bad link) will not
+            // change on retry; only server errors are worth another try.
+            if (res.status < 500) break;
+            continue;
+          }
+          const view = (await res.json()) as PortalView;
+          if (!cancelled) setLoad({ state: 'ready', view });
+          return;
+        } catch {
+          // Timed out or the connection failed: try again.
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      if (!cancelled) setLoad({ state: 'error' });
+    })();
+    return () => { cancelled = true; controller?.abort(); };
   }, [needsWifi, router, mac, loc, attempt]);
 
   const retry = () => {
@@ -75,7 +105,7 @@ export function CustomerPortal({ page }: { page: 'portal' | 'connect' }) {
     return (
       <PortalShell>
         <Notice tone="bad" title="The plans could not be loaded">
-          Check that you are still on the Connectly WiFi, then try again.
+          Tap Try again. If it still does not load, turn your WiFi off and on, then rejoin Connectly.
         </Notice>
         <Button variant="secondary" size="lg" full className="mt-5" onClick={retry}>Try again</Button>
       </PortalShell>
